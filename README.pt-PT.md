@@ -4,6 +4,11 @@
 
 [English](README.md) · **Português (PT-PT)**
 
+<p align="center">
+  <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge.plugin"><img alt="Download fuel-gauge.plugin for Cowork" src="https://img.shields.io/badge/Download-fuel--gauge.plugin-D9822B?style=for-the-badge"></a>
+  <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-pt.plugin"><img alt="Descarregar em português" src="https://img.shields.io/badge/Descarregar-PT--PT-5B8DEF?style=for-the-badge"></a>
+</p>
+
 **Deixa de vigiar os limites à mão.** Acabou o "já vais em 80%, despacha" e as tarefas longas que morrem nos 100% a meio de uma alteração.
 
 O `fuel-gauge` dá ao Claude noção dos próprios limites. Lê a janela de 5 horas, a janela semanal e o preenchimento do contexto a partir das respostas que a sessão já recebe. Mostra esses valores ao Claude em cada mensagem, desenha um pequeno medidor junto à caixa de texto e aplica um **bloqueio rígido aos 95%**, para o trabalho parar num ponto limpo e não a meio de uma edição.
@@ -26,6 +31,8 @@ Num terminal do Claude Code:
 ```
 /plugin install fuel-gauge --marketplace LuisPCFialho/claude-fuel-gauge
 ```
+
+No Cowork: descarrega o [`fuel-gauge-pt.plugin`](https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-pt.plugin), anexa-o a um chat do Cowork e pede ao Claude para o instalar; depois carrega em **Instalar** no cartão do plugin. Passa a carregar em todos os chats novos dessa conta.
 
 Na app de desktop: **+** junto à caixa de texto, **Plugins**, **Add marketplace** com `LuisPCFialho/claude-fuel-gauge` e depois **Add plugin**. Escolhe `pt` na opção `language`.
 
