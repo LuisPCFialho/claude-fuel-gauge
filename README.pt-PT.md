@@ -17,6 +17,8 @@ O `fuel-gauge` dá ao Claude noção dos próprios limites. Lê a janela de 5 ho
 - **Medidor para o Cowork** (opcional): um artifact do claude.ai com dois mostradores que se atualizam depois de cada resposta.
 - **Ícone na barra do Windows** (opcional): duas barras pequenas junto ao relógio.
 
+Um chat novo não começa às cegas: retoma a última leitura (desta máquina ou do artifact do Cowork, que sobrevive às sessões na nuvem). As janelas cuja hora de reset já passou contam como 0%, e se a leitura tiver mais de 15 minutos o Claude sabe a idade dela, porque o uso feito sem o plugin (claude.ai, telemóvel) só aparece na resposta seguinte.
+
 ## Instalar
 
 Num terminal do Claude Code:

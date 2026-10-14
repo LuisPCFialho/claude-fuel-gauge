@@ -20,8 +20,9 @@ function usage(fiveHour: number, week: number): SessionUsage {
 type Seen = { context?: readonly string[]; bash: number }
 
 function world(on: On, u: SessionUsage, seen: Seen) {
-  mock.clock(on, { now: Date.UTC(2026, 9, 14, 13, 0, 0) })
-  on('session.usage', () => ({ value: u }))
+  const clk = mock.clock(on, { now: Date.UTC(2026, 9, 14, 13, 0, 0) })
+  const box = { u }
+  on('session.usage', () => ({ value: box.u }))
   on('ui.render', () => null as never)
   on('prompt.submit', ($, e) => {
     seen.context = e.context
@@ -31,6 +32,7 @@ function world(on: On, u: SessionUsage, seen: Seen) {
     seen.bash += 1
     return { result: { stdout: 'ok', stderr: '', interrupted: false } } as never
   })
+  return { clk, box }
 }
 
 const submit = (text: string) => ({ text, wait: false, origin: { kind: 'composer' } }) as const
@@ -116,4 +118,18 @@ test('the bar draws on terminal and desktop and unlocks', async ($, on) => {
   await ui.press({ key: 'unlock' })
   expect(await ui.find({ key: 'unlock' })).toBeUndefined()
   await ui.unmount()
+})
+
+test('a response without window figures keeps the last reading and flags its age', { options: PT }, async ($, on) => {
+  const seen: Seen = { bash: 0 }
+  const { clk, box } = world(on, usage(42, 58), seen)
+  await $.tool.call({ tool: LIMITS } as never)
+  box.u = { ...usage(0, 0), rateLimits: [] }
+  await clk.advance(3 * 3600_000)
+  await $.tool.call({ tool: LIMITS } as never)
+  await $.prompt.submit(submit('olá'))
+  const line = (seen.context ?? []).join('\n')
+  expect(line).toContain('5h 42%')
+  expect(line).toContain('Semana 58%')
+  expect(line).toContain('leitura de há 3h00')
 })

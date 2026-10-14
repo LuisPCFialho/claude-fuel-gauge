@@ -68,6 +68,7 @@ const WORDS = {
     noReading: 'account limits: no reading yet',
     context: (p: number, w: string) => `context ${p}% of ${w}`,
     hardStop: (n: number) => `hard stop at ${n}%`,
+    old: (a: string) => `reading from ${a} ago; usage elsewhere since then is not counted yet`,
     drop: (why: string) => `Stopped by Fuel Gauge: ${why}. To go on anyway, start your message with "continue" or press "Unlock 1 request".`,
     deny: (why: string) => `Stopped by Fuel Gauge (${why}). Take no more actions: finish now with a short summary of what is done and what is left, and tell the user you will only go on if they write "continue".`,
     allowed: (n: number) => `[Fuel gauge] The user explicitly allowed going past ${n}% for this request only.`,
@@ -102,6 +103,7 @@ const WORDS = {
     noReading: 'limites da conta: ainda sem leitura',
     context: (p: number, w: string) => `contexto ${p}% de ${w}`,
     hardStop: (n: number) => `bloqueio rígido aos ${n}%`,
+    old: (a: string) => `leitura de há ${a}; uso noutros sítios desde então ainda não está contado`,
     drop: (why: string) => `Bloqueado pelo Fuel Gauge: ${why}. Para continuar mesmo assim, começa a mensagem com "continuar" ou carrega em "Desbloquear 1 pedido".`,
     deny: (why: string) => `Bloqueado pelo Fuel Gauge (${why}). Não executes mais ações: termina já com um resumo curto do estado e do que falta, e diz ao utilizador que só continuas se ele escrever "continuar".`,
     allowed: (n: number) => `[Medidor de limites] O utilizador autorizou explicitamente continuar acima de ${n}% apenas para este pedido.`,
@@ -246,6 +248,7 @@ function modelLine(r: FuelReading | null, now: number, c: Config, w: Words): str
   }
   if (parts.length === 0) parts.push(w.noReading)
   if (r?.ctxPercent !== undefined) parts.push(w.context(r.ctxPercent, kTokens(r.ctxWindow)))
+  if (r && r.windows.length > 0 && now - r.readAt > 15 * 60_000) parts.push(w.old(span(now - r.readAt)))
   return `[${w.prefix}, ${clock(now, c.lang)}] ${parts.join(' | ')} | ${w.hardStop(c.lockAt)}`
 }
 
@@ -256,9 +259,61 @@ function why(top: { win: FuelWindow; value: number }, now: number, c: Config, w:
 
 async function refresh($: EngineInterface, u: Pick<SessionUsage, 'context' | 'rateLimits' | 'cost'>) {
   const now = await $.clock.now()
-  const next = toReading(u, now)
+  const fresh = toReading(u, now)
+  const prev = await read($, reading)
+  // No window figures in this response (e.g. a new chat before its first
+  // reply): keep the last known windows and their time, update the rest.
+  const next: FuelReading =
+    fresh.windows.length === 0 && prev && prev.windows.length > 0
+      ? { ...fresh, windows: prev.windows, readAt: prev.readAt }
+      : fresh
   await update($, reading, () => next)
+  if (fresh.windows.length > 0) {
+    try {
+      await $.store.set('lastReading', { windows: fresh.windows, readAt: now })
+    } catch {
+      // no store on this host
+    }
+  }
   return { now, next }
+}
+
+// Last known windows from an earlier session: this machine's store, or the
+// Cowork gauge artifact (which outlives cloud containers). Newest wins.
+async function seed($: EngineInterface, c: Config): Promise<void> {
+  const cur = await read($, reading)
+  if (cur && cur.windows.length > 0) return
+  const found: { windows: FuelWindow[]; readAt: number }[] = []
+  try {
+    const s = (await $.store.get('lastReading')) as { windows?: FuelWindow[]; readAt?: number } | undefined
+    if (s && Array.isArray(s.windows) && typeof s.readAt === 'number') found.push({ windows: s.windows, readAt: s.readAt })
+  } catch {
+    // no store
+  }
+  if (c.gaugeUrl) {
+    try {
+      const res = (await $.tool.call({ tool: 'ArtifactData', action: 'get', url: c.gaugeUrl, collection: 'data/users/me', doc_id: 'gauge' } as never)) as { text?: string }
+      const line = (res.text ?? '').split('\n').find(l => l.startsWith('{"id":"gauge"'))
+      const doc = line ? (JSON.parse(line) as { data?: { updatedAt?: number; windows?: { kind: string; percent: number; resetsAt?: string | null }[] } }) : null
+      const d = doc?.data
+      if (d && Array.isArray(d.windows) && typeof d.updatedAt === 'number') {
+        found.push({
+          readAt: d.updatedAt,
+          windows: d.windows.map(x => {
+            const f: FuelWindow = { kind: x.kind, percentUsed: Number(x.percent) }
+            if (x.resetsAt) f.resetsAt = x.resetsAt
+            return f
+          }),
+        })
+      }
+    } catch {
+      // no artifact access on this host
+    }
+  }
+  const best = found.sort((a, b) => b.readAt - a.readAt)[0]
+  if (!best) return
+  const base: FuelReading = cur ?? { windows: [], ctxWindow: 0, readAt: best.readAt }
+  await update($, reading, () => ({ ...base, windows: best.windows, readAt: best.readAt }))
 }
 
 // --- Outputs for surfaces that cannot draw the bar ----------------------------
@@ -368,6 +423,7 @@ export const register: Register = (on, options) => {
     } catch {
       // no reading yet: the first API response brings the values
     }
+    await seed($, c)
     return next(e)
   })
 

@@ -62,6 +62,8 @@ flowchart LR
 
 The engine already receives your usage windows with every response. `fuel-gauge` listens for those readings (`session.measure`), keeps the latest one and uses it in four places. It never calls the API on its own.
 
+A new chat does not start blind: it picks up the last reading (from this machine, or from the Cowork gauge artifact, which outlives cloud sessions). Windows whose reset time has passed count as 0%, and when the reading is older than 15 minutes Claude is told how old it is, because usage from places without the plugin (claude.ai, mobile) only shows up with the next response.
+
 ## What it costs
 
 | Piece | Cost |

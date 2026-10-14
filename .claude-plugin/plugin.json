@@ -1,6 +1,6 @@
 {
   "name": "fuel-gauge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unofficial fuel gauge for Claude: it knows its own 5-hour and weekly limits, shows them next to your prompt and hard-stops at 95% so you never get cut off mid-task.",
   "author": {
     "name": "LuisPCFialho",
