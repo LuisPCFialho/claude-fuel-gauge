@@ -18,6 +18,8 @@ O `fuel-gauge` dá ao Claude noção dos próprios limites. Lê a janela de 5 ho
 - **O Claude sabe os limites.** Cada mensagem leva uma linha curta com a % de cada janela, a hora de reset e o contexto. O Claude gere o trabalho e avisa logo à partida quando a margem é curta.
 - **Medidor junto à caixa de texto** (terminal e desktop): duas mini barras com cor por nível e hora de reset. `/fuel` ou **Detalhes** abrem um painel.
 - **Bloqueio rígido aos 95%:** as ferramentas (incluindo subagentes) e os pedidos novos são recusados. O Claude para, faz um resumo do que ficou feito e do que falta, e só continua quando começas a mensagem com `continuar` ou carregas em **Desbloquear 1 pedido**. O bloqueio levanta-se sozinho quando a janela é reposta.
+- **Ritmo e orçamento:** `5h 18% (ritmo 6%/h, 95% às 16:20)` e `Semana 60% (~13%/dia até lá)`. O Claude sabe se uma tarefa cabe antes de a começar.
+- **Custo de cada pedido:** `último pedido: 5h +2%, Semana +1%`, para o Claude (e tu) saberem quanto pesa cada tipo de tarefa.
 - **Avisos aos 80% e 90%**, também a meio de uma tarefa longa.
 - **Medidor para o Cowork** (opcional): um artifact do claude.ai com dois mostradores que se atualizam depois de cada resposta.
 - **Ícone na barra do Windows** (opcional): duas barras pequenas junto ao relógio.

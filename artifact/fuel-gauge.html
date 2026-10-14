@@ -65,6 +65,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); }
     <div class="bar"><i id="ctxBar" style="width:0%"></i></div>
   </section>
   <div class="empty" id="empty"><b id="emptyTitle">Waiting for the first reading</b><span id="emptyText">Send a message in a session with the Fuel Gauge plugin and the dials fill in here, live.</span></div>
+  <p class="reset" id="cost" hidden></p>
   <p class="foot" id="rules"></p>
 </div>
 
@@ -149,8 +150,9 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); }
     $("dials").innerHTML = wins.map(w => {
       const used = effective(w), lvl = level(used, lockAt), left = Math.max(0, 100 - used);
       const r = w.resetsAt ? `<div class="reset">${L.reset} <b>${esc(when(w.resetsAt))}</b> · ${L.in} ${esc(span(Date.parse(w.resetsAt) - Date.now()))}</div>` : "";
+      const n = w.note ? `<div class="reset">${esc(w.note)}</div>` : "";
       return `<article class="dial"><h2><span>${esc(w.label || w.kind)}</span><span>${L[lvl]}</span></h2>${dialSvg(used, lockAt, lvl)}
-        <div class="readout"><div class="big">${fmtPct(left)}<span>% ${L.left}</span></div><div class="used">${fmtPct(used)}% ${L.used}</div></div>${r}</article>`;
+        <div class="readout"><div class="big">${fmtPct(left)}<span>% ${L.left}</span></div><div class="used">${fmtPct(used)}% ${L.used}</div></div>${r}${n}</article>`;
     }).join("");
     const worst = wins.reduce((a, w) => (!a || effective(w) > effective(a) ? w : a), null);
     const pill = $("state");
@@ -169,6 +171,8 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); }
       $("ctxVal").textContent = `${c.percent}%${c.tokens ? ` · ${k(c.tokens)} / ${k(c.window)}` : ""}`;
       $("ctxBar").style.width = `${Math.min(100, c.percent)}%`;
     }
+    $("cost").hidden = !(doc && doc.lastCost);
+    if (!$("cost").hidden) $("cost").textContent = doc.lastCost;
     if (doc && doc.updatedAt) {
       const s = Math.round((Date.now() - doc.updatedAt) / 1000);
       $("age").textContent = s < 60 ? `${L.updated} ${L.now}` : (doc.lang === "pt" ? `${L.updated} há ${span(s * 1000)}` : `${L.updated} ${span(s * 1000)} ${L.ago}`);

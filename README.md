@@ -25,6 +25,8 @@
 | **Claude knows its limits** | Every message carries one short line: `5h 23% (resets 17:00, in 2h10) \| Week 78% (resets Sat 06:00) \| context 31%`. Claude paces heavy work and tells you up front when the margin is short. |
 | **A gauge next to your prompt** | Two mini bars above the input (terminal and desktop), coloured by level, with reset times. `/fuel` or **Details** opens a panel. |
 | **Hard stop at 95%** | Past the threshold, tool calls (subagents included) and new requests are refused. Claude stops, gives a short summary of what is done and what is left, and goes on only when you start a message with `continue` or press **Unlock 1 request**. The lock lifts by itself when the window resets. |
+| **Pace and budget** | `5h 18% (resets 17:00; pace 6%/h, 95% at 16:20)` and `Week 60% (~13%/day until then)`. Claude knows whether a task fits before it starts. |
+| **Cost per request** | `last request: 5h +2%, Week +1%`, so Claude (and you) learn what each kind of task costs. |
 | **Warnings at 80% and 90%** | A toast for you and a note for Claude, even in the middle of a long turn. |
 | **Cowork gauge (optional)** | A live claude.ai artifact with two fuel dials that update after every response. |
 | **Windows taskbar icon (optional)** | Two tiny bars next to the clock. Hover for the numbers, double-click for the gauge. |

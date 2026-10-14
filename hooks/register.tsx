@@ -9,7 +9,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register, SessionRateLimit, SessionUsage } from 'claude-code'
 
-import type { FuelReading, FuelWindow } from '../types'
+import type { FuelHistory, FuelReading, FuelWindow } from '../types'
 
 // --- Config ------------------------------------------------------------------
 
@@ -53,6 +53,9 @@ const inTurn = atom({ plugin: 'fuel-gauge', key: 'inTurn' } as const, false)
 const unlocked = atom({ plugin: 'fuel-gauge', key: 'unlocked' } as const, false)
 const warned = atom({ plugin: 'fuel-gauge', key: 'warned' } as const, {})
 const gaugeVersion = atom({ plugin: 'fuel-gauge', key: 'gaugeVersion' } as const, 0)
+const samples = atom({ plugin: 'fuel-gauge', key: 'samples' } as const, {})
+const turnStart = atom({ plugin: 'fuel-gauge', key: 'turnStart' } as const, null)
+const lastCost = atom({ plugin: 'fuel-gauge', key: 'lastCost' } as const, null)
 
 // --- Words -------------------------------------------------------------------
 
@@ -69,6 +72,13 @@ const WORDS = {
     context: (p: number, w: string) => `context ${p}% of ${w}`,
     hardStop: (n: number) => `hard stop at ${n}%`,
     old: (a: string) => `reading from ${a} ago; usage elsewhere since then is not counted yet`,
+    pace: (r: string) => `pace ${r}%/h`,
+    hitsAt: (n: number, at: string) => `${n}% at ${at}`,
+    safe: (n: number) => `won't reach ${n}% before the reset`,
+    perDay: (x: string) => `~${x}%/day until then`,
+    lastCost: (x: string) => `last request: ${x}`,
+    lastTiny: 'last request: under 1%',
+    lastLabel: 'Last request',
     drop: (why: string) => `Stopped by Fuel Gauge: ${why}. To go on anyway, start your message with "continue" or press "Unlock 1 request".`,
     deny: (why: string) => `Stopped by Fuel Gauge (${why}). Take no more actions: finish now with a short summary of what is done and what is left, and tell the user you will only go on if they write "continue".`,
     allowed: (n: number) => `[Fuel gauge] The user explicitly allowed going past ${n}% for this request only.`,
@@ -104,6 +114,13 @@ const WORDS = {
     context: (p: number, w: string) => `contexto ${p}% de ${w}`,
     hardStop: (n: number) => `bloqueio rígido aos ${n}%`,
     old: (a: string) => `leitura de há ${a}; uso noutros sítios desde então ainda não está contado`,
+    pace: (r: string) => `ritmo ${r}%/h`,
+    hitsAt: (n: number, at: string) => `${n}% às ${at}`,
+    safe: (n: number) => `não chega aos ${n}% antes do reset`,
+    perDay: (x: string) => `~${x}%/dia até lá`,
+    lastCost: (x: string) => `último pedido: ${x}`,
+    lastTiny: 'último pedido: menos de 1%',
+    lastLabel: 'Último pedido',
     drop: (why: string) => `Bloqueado pelo Fuel Gauge: ${why}. Para continuar mesmo assim, começa a mensagem com "continuar" ou carrega em "Desbloquear 1 pedido".`,
     deny: (why: string) => `Bloqueado pelo Fuel Gauge (${why}). Não executes mais ações: termina já com um resumo curto do estado e do que falta, e diz ao utilizador que só continuas se ele escrever "continuar".`,
     allowed: (n: number) => `[Medidor de limites] O utilizador autorizou explicitamente continuar acima de ${n}% apenas para este pedido.`,
@@ -238,14 +255,75 @@ async function snapshot($: EngineInterface, c: Config) {
   return { now, r, top, free, locked: !free && top !== null && top.value >= c.lockAt }
 }
 
+// --- Pace, budget and per-request cost ---------------------------------------
+
+// %/h over the last hour of samples of this window (at least 10 minutes).
+function pace(h: FuelHistory | undefined, f: FuelWindow, now: number): number | null {
+  const pts = h?.[f.kind]?.points ?? []
+  const recent = pts.filter(x => now - x.t <= 3600_000)
+  const first = recent[0] ?? pts[pts.length - 1]
+  if (!first) return null
+  const hours = (now - first.t) / 3600_000
+  if (hours < 1 / 6) return null
+  const dp = f.percentUsed - first.p
+  return dp < 0 ? null : dp / hours
+}
+
+// The short-window outlook (pace and when it would hit the stop) or, for
+// weekly windows, the daily budget left until the reset.
+function outlook(h: FuelHistory | undefined, f: FuelWindow, now: number, c: Config, w: Words): string {
+  const v = effective(f, now)
+  if (f.kind.startsWith('seven_day')) {
+    if (!f.resetsAt) return ''
+    const days = (Date.parse(f.resetsAt) - now) / 86_400_000
+    const left = c.lockAt - v
+    if (days < 0.5 || left <= 0) return ''
+    return w.perDay(pct(Math.max(0, Math.round(left / days)), c))
+  }
+  const r = pace(h, f, now)
+  if (r === null) return ''
+  const rate = w.pace(pct(Math.round(r * 10) / 10, c))
+  const reset = f.resetsAt ? Date.parse(f.resetsAt) : Number.POSITIVE_INFINITY
+  if (r <= 0) return `${rate}, ${w.safe(c.lockAt)}`
+  const eta = now + ((c.lockAt - v) / r) * 3600_000
+  return eta >= reset ? `${rate}, ${w.safe(c.lockAt)}` : `${rate}, ${w.hitsAt(c.lockAt, when(new Date(eta).toISOString(), now, c, w))}`
+}
+
+function costText(cost: Record<string, number> | null, c: Config, w: Words): string {
+  if (!cost) return ''
+  const parts = Object.entries(cost)
+    .filter(([, d]) => d >= 0.5)
+    .map(([k, d]) => `${label(k, w)} +${pct(Math.round(d * 10) / 10, c)}%`)
+  return parts.length > 0 ? w.lastCost(parts.join(', ')) : w.lastTiny
+}
+
+async function record($: EngineInterface, windows: FuelWindow[], now: number): Promise<void> {
+  await update($, samples, h => {
+    const out: FuelHistory = {}
+    for (const f of windows) {
+      const prev = h?.[f.kind]
+      const same = prev !== undefined && prev.resetsAt === (f.resetsAt ?? null)
+      let pts = same ? prev.points.filter(x => now - x.t <= 3 * 3600_000) : []
+      const last = pts[pts.length - 1]
+      if (!last || last.p !== f.percentUsed || now - last.t >= 5 * 60_000) pts = [...pts, { t: now, p: f.percentUsed }]
+      out[f.kind] = { resetsAt: f.resetsAt ?? null, points: pts.slice(-60) }
+    }
+    return out
+  })
+}
+
 const kTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
-function modelLine(r: FuelReading | null, now: number, c: Config, w: Words): string {
+function modelLine(r: FuelReading | null, now: number, c: Config, w: Words, h?: FuelHistory, cost?: Record<string, number> | null): string {
   const parts: string[] = []
   for (const f of r?.windows ?? []) {
     const q = whenLong(f.resetsAt, now, c, w)
-    parts.push(`${label(f.kind, w)} ${pct(effective(f, now), c)}%${q ? ` (${w.resets} ${q})` : ''}`)
+    const o = outlook(h, f, now, c, w)
+    const extra = [q ? `${w.resets} ${q}` : '', o].filter(Boolean).join('; ')
+    parts.push(`${label(f.kind, w)} ${pct(effective(f, now), c)}%${extra ? ` (${extra})` : ''}`)
   }
+  const ct = costText(cost ?? null, c, w)
+  if (ct) parts.push(ct)
   if (parts.length === 0) parts.push(w.noReading)
   if (r?.ctxPercent !== undefined) parts.push(w.context(r.ctxPercent, kTokens(r.ctxWindow)))
   if (r && r.windows.length > 0 && now - r.readAt > 15 * 60_000) parts.push(w.old(span(now - r.readAt)))
@@ -269,6 +347,7 @@ async function refresh($: EngineInterface, u: Pick<SessionUsage, 'context' | 'ra
       : fresh
   await update($, reading, () => next)
   if (fresh.windows.length > 0) {
+    await record($, fresh.windows, now)
     try {
       await $.store.set('lastReading', { windows: fresh.windows, readAt: now })
     } catch {
@@ -321,6 +400,7 @@ async function seed($: EngineInterface, c: Config): Promise<void> {
 async function payload($: EngineInterface, c: Config, w: Words) {
   const s = await snapshot($, c)
   if (!s.r) return null
+  const h = await read($, samples)
   return {
     lang: c.lang,
     account: (await $.env.get('CLAUDE_CODE_USER_EMAIL')) ?? null,
@@ -328,8 +408,9 @@ async function payload($: EngineInterface, c: Config, w: Words) {
     lockAt: c.lockAt,
     locked: s.locked,
     gaugeUrl: c.gaugeUrl || null,
-    windows: s.r.windows.map(f => ({ kind: f.kind, label: label(f.kind, w), percent: f.percentUsed, resetsAt: f.resetsAt ?? null })),
+    windows: s.r.windows.map(f => ({ kind: f.kind, label: label(f.kind, w), percent: f.percentUsed, resetsAt: f.resetsAt ?? null, note: outlook(h, f, s.now, c, w) || null })),
     context: { percent: s.r.ctxPercent ?? null, tokens: s.r.ctxTokens ?? null, window: s.r.ctxWindow },
+    lastCost: costText(await read($, lastCost), c, w) || null,
   }
 }
 
@@ -459,7 +540,16 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.start', async ($, e, next) => {
-    if (!e.agentId) await update($, inTurn, () => true)
+    if (!e.agentId) {
+      await update($, inTurn, () => true)
+      try {
+        const r = await read($, reading)
+        const start = Object.fromEntries((r?.windows ?? []).map(f => [f.kind, f.percentUsed]))
+        await update($, turnStart, () => (Object.keys(start).length > 0 ? start : null))
+      } catch {
+        // no reading yet
+      }
+    }
     return next(e)
   })
 
@@ -468,6 +558,19 @@ export const register: Register = (on, options) => {
       await update($, inTurn, () => false)
       // A go-ahead covers only the request it was given for.
       await update($, unlocked, () => false)
+      // What this request cost, from the figures of its last response.
+      try {
+        const start = await read($, turnStart)
+        const u = await $.session.usage()
+        if (start && u.rateLimits.length > 0) {
+          const cost: Record<string, number> = {}
+          for (const x of u.rateLimits) if (x.kind in start) cost[x.kind] = Math.max(0, x.percentUsed - (start[x.kind] ?? x.percentUsed))
+          await update($, lastCost, () => cost)
+        }
+        await update($, turnStart, () => null)
+      } catch {
+        // keep the previous cost
+      }
     }
     return next(e)
   })
@@ -480,7 +583,7 @@ export const register: Register = (on, options) => {
     const s = await snapshot($, c)
     if (s.locked && s.top) return { drop: w.drop(why(s.top, s.now, c, w)) }
     const extra: string[] = []
-    if (c.contextLine) extra.push(modelLine(s.r, s.now, c, w))
+    if (c.contextLine) extra.push(modelLine(s.r, s.now, c, w, await read($, samples), await read($, lastCost)))
     if (goAhead && s.top && s.top.value >= c.lockAt) extra.push(w.allowed(c.lockAt))
     if (extra.length === 0) return next(e)
     return next({ ...e, context: [...(e.context ?? []), ...extra] })
@@ -502,7 +605,7 @@ export const register: Register = (on, options) => {
     }
     const errors = await pushAll($, c, w)
     const s = await snapshot($, c)
-    const lines = [modelLine(s.r, s.now, c, w)]
+    const lines = [modelLine(s.r, s.now, c, w, await read($, samples), await read($, lastCost))]
     if (s.r?.ctxTokens !== undefined) lines.push(w.tokens(s.r.ctxTokens, s.r.ctxWindow))
     if (s.locked) lines.push(w.stateLocked)
     else if (s.free) lines.push(w.stateUnlocked)
@@ -513,7 +616,7 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'fuel' }, async $ => {
     await $.ui.open({ id: PANE, title: w.paneTitle })
     const s = await snapshot($, c)
-    return { text: modelLine(s.r, s.now, c, w) }
+    return { text: modelLine(s.r, s.now, c, w, await read($, samples), await read($, lastCost)) }
   })
 
   // --- The bar next to the prompt (terminal and desktop) ---------------------
@@ -562,6 +665,8 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const s = await snapshot($, c)
+    const h = await read($, samples)
+    const cost = costText(await read($, lastCost), c, w)
     const R = $.ui.resolve(e)
     const { Box, Text, Button } = R
     const Svg = 'Svg' in R && e.surface !== 'terminal' ? R.Svg : undefined
@@ -585,6 +690,7 @@ export const register: Register = (on, options) => {
                 <Text color={themeFor(v, c)}>{barText(v, 24)}</Text>
               )}
               {q ? <Text size="caption" dimColor>{w.resets} {q}</Text> : null}
+              {outlook(h, f, s.now, c, w) ? <Text size="caption" dimColor>{outlook(h, f, s.now, c, w)}</Text> : null}
             </Box>
           )
         })}
@@ -597,6 +703,7 @@ export const register: Register = (on, options) => {
             {s.r.costUsd !== undefined ? (
               <Text size="caption" dimColor>{w.cost}: {pct(Number(s.r.costUsd.toFixed(2)), c)} USD</Text>
             ) : null}
+            {cost ? <Text size="caption">{cost}</Text> : null}
             <Text size="caption" dimColor>{w.lastRead}: {clock(s.r.readAt, c.lang)}</Text>
           </Box>
         ) : null}

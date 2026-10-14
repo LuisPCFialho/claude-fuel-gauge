@@ -133,3 +133,42 @@ test('a response without window figures keeps the last reading and flags its age
   expect(line).toContain('Semana 58%')
   expect(line).toContain('leitura de há 3h00')
 })
+
+test('pace outlook for the 5-hour window and daily budget for the week', { options: PT }, async ($, on) => {
+  const seen: Seen = { bash: 0 }
+  const T0 = Date.UTC(2026, 9, 14, 13, 0, 0)
+  const at = (fh: number, wk: number): SessionUsage => ({
+    startedAt: 0,
+    context: { window: 200000, tokens: 1000, percent: 1 },
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: fh, resetsAt: new Date(T0 + 3 * 3600_000).toISOString() },
+      { kind: 'seven_day', percentUsed: wk, resetsAt: new Date(T0 + 3 * 86_400_000).toISOString() },
+    ],
+  })
+  const { clk, box } = world(on, at(10, 59), seen)
+  await $.tool.call({ tool: LIMITS } as never)
+  await clk.advance(30 * 60_000)
+  box.u = at(13, 60)
+  await $.tool.call({ tool: LIMITS } as never)
+  await $.prompt.submit(submit('olá'))
+  const line = (seen.context ?? []).join('\n')
+  expect(line).toContain('ritmo 6%/h')
+  expect(line).toContain('~12%/dia até lá')
+})
+
+test('slow pace says the stop will not be reached before the reset', async ($, on) => {
+  const seen: Seen = { bash: 0 }
+  const T0 = Date.UTC(2026, 9, 14, 13, 0, 0)
+  const at = (fh: number): SessionUsage => ({
+    startedAt: 0,
+    context: { window: 200000, tokens: 1000, percent: 1 },
+    rateLimits: [{ kind: 'five_hour', percentUsed: fh, resetsAt: new Date(T0 + 2 * 3600_000).toISOString() }],
+  })
+  const { clk, box } = world(on, at(20), seen)
+  await $.tool.call({ tool: LIMITS } as never)
+  await clk.advance(20 * 60_000)
+  box.u = at(21)
+  await $.tool.call({ tool: LIMITS } as never)
+  await $.prompt.submit(submit('hi'))
+  expect((seen.context ?? []).join('\n')).toContain("won't reach 95% before the reset")
+})

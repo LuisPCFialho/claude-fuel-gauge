@@ -175,8 +175,14 @@ $null = $menu.Items.Add('-')
 $itemQuit = $menu.Items.Add('Quit', $null, { $tray.Visible = $false; [System.Windows.Forms.Application]::Exit() })
 $itemInfo = New-Object System.Windows.Forms.ToolStripMenuItem
 $itemInfo.Enabled = $false
+$itemNote = New-Object System.Windows.Forms.ToolStripMenuItem
+$itemNote.Enabled = $false
+$itemCost = New-Object System.Windows.Forms.ToolStripMenuItem
+$itemCost.Enabled = $false
 $menu.Items.Insert(0, $itemInfo)
-$menu.Items.Insert(1, (New-Object System.Windows.Forms.ToolStripSeparator))
+$menu.Items.Insert(1, $itemNote)
+$menu.Items.Insert(2, $itemCost)
+$menu.Items.Insert(3, (New-Object System.Windows.Forms.ToolStripSeparator))
 $tray.ContextMenuStrip = $menu
 $tray2.ContextMenuStrip = $menu
 $tray2.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
@@ -187,6 +193,8 @@ function Update-Tray {
   $a = 0.0; $b = 0.0; $stale = $true
   $text = (W).none
   $info = 'Fuel Gauge'
+  $noteText = ''
+  $costLine = ''
   try {
     if (Test-Path $DataFile) {
       $d = Get-Content $DataFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -202,6 +210,11 @@ function Update-Tray {
       if ($five) { $parts += "5h $(Format-Pct $a)% ($(Format-Reset $five.resetsAt))" }
       if ($week) { $parts += "$((W).week) $(Format-Pct $b)% ($(Format-Reset $week.resetsAt))" }
       $text = ($parts -join ' | ')
+      $notes = @()
+      if ($five -and $five.note) { $notes += "5h: $($five.note)" }
+      if ($week -and $week.note) { $notes += "$((W).week): $($week.note)" }
+      $noteText = $notes -join '  |  '
+      if ($d.lastCost) { $costLine = [string]$d.lastCost }
       $acct = Get-AccountLabel $d.account
       $when = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$d.updatedAt).LocalDateTime.ToString('dd/MM HH:mm')
       $info = (@($acct, "$((W).updated) $when ($(Format-Age $ageMin))") | Where-Object { $_ }) -join ' - '
@@ -220,6 +233,8 @@ function Update-Tray {
     }
   } catch { $text = (W).error }
   $itemInfo.Text = $info
+  $itemNote.Text = $noteText; $itemNote.Visible = [bool]$noteText
+  $itemCost.Text = $costLine; $itemCost.Visible = [bool]$costLine
   $itemOpen.Text = (W).open; $itemOpen.Enabled = [bool]$script:url
   $itemRefresh.Text = (W).refresh; $itemQuit.Text = (W).quit; $itemSettings.Text = (W).settings
   if ($text.Length -gt 63) { $text = $text.Substring(0, 63) }
