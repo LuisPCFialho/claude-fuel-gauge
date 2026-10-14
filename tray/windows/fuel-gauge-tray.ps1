@@ -20,10 +20,10 @@ $IntervalMs = 120000
 # Without new readings nothing was used, so the figures stay right; windows
 # that pass their reset time drop to 0. Grey only after a full week of silence.
 $StaleMinutes = 10080
-$aa = [char]0x00E1; $at = [char]0x00E3
+$aa = [char]0x00E1; $at = [char]0x00E3; $ii = [char]0x00ED; $cc = [char]0x00E7; $ot = [char]0x00F5
 $Words = @{
-  en = @{ days = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); tomorrow = 'tomorrow'; week = 'Week'; stale = 'No data for a week.'; ago = 'ago'; updated = 'updated'; locked = 'LOCKED.'; none = 'Fuel Gauge: no data yet'; error = 'Fuel Gauge: could not read data'; open = 'Open Fuel Gauge'; refresh = 'Refresh now'; quit = 'Quit'; at = 'at'; of = 'of the limit' }
-  pt = @{ days = @('dom', 'seg', 'ter', 'qua', 'qui', 'sex', "s$($aa)b"); tomorrow = "amanh$at"; week = 'Semana'; stale = 'Sem dados há uma semana.'; ago = 'há'; updated = 'atualizado'; locked = 'BLOQUEADO.'; none = 'Fuel Gauge: sem dados ainda'; error = 'Fuel Gauge: erro a ler os dados'; open = 'Abrir Fuel Gauge'; refresh = 'Atualizar agora'; quit = 'Sair'; at = 'a'; of = 'do limite' }
+  en = @{ days = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); tomorrow = 'tomorrow'; week = 'Week'; stale = 'No data for a week.'; ago = 'ago'; updated = 'updated'; locked = 'LOCKED.'; none = 'Fuel Gauge: no data yet'; error = 'Fuel Gauge: could not read data'; open = 'Open Fuel Gauge'; refresh = 'Refresh now'; quit = 'Quit'; at = 'at'; of = 'of the limit'; settings = 'Settings...'; show = 'Show in the taskbar'; bars = 'Bars'; percent = 'Percentage'; both = 'Bars and percentage (two icons)'; every = 'Refresh every'; minutes = 'min'; alerts = 'Notify above 90%'; save = 'Save'; cancel = 'Cancel' }
+  pt = @{ days = @('dom', 'seg', 'ter', 'qua', 'qui', 'sex', "s$($aa)b"); tomorrow = "amanh$at"; week = 'Semana'; stale = "Sem dados h$($aa) uma semana."; ago = "h$($aa)"; updated = 'atualizado'; locked = 'BLOQUEADO.'; none = 'Fuel Gauge: sem dados ainda'; error = 'Fuel Gauge: erro a ler os dados'; open = 'Abrir Fuel Gauge'; refresh = 'Atualizar agora'; quit = 'Sair'; at = 'a'; of = 'do limite'; settings = "Defini$($cc)$($ot)es..."; show = 'Mostrar na barra'; bars = 'Barras'; percent = 'Percentagem'; both = "Barras e percentagem (dois $($ii)cones)"; every = 'Atualizar a cada'; minutes = 'min'; alerts = 'Avisar acima de 90%'; save = 'Guardar'; cancel = 'Cancelar' }
 }
 $Colors = @{
   ok    = [System.Drawing.Color]::FromArgb(63, 185, 80)
@@ -80,6 +80,60 @@ function Test-LightTaskbar {
 }
 
 $script:lastHandle = [IntPtr]::Zero
+$script:lastHandle2 = [IntPtr]::Zero
+
+# Tray settings, kept next to the data file (one set per account).
+$SettingsFile = [IO.Path]::ChangeExtension($DataFile, '.tray.json')
+$script:cfg = @{ mode = 'bars'; minutes = 2; alerts = $true }
+try {
+  if (Test-Path $SettingsFile) {
+    $saved = Get-Content $SettingsFile -Raw | ConvertFrom-Json
+    if ($saved.mode -in @('bars', 'percent', 'both')) { $script:cfg.mode = [string]$saved.mode }
+    if ([int]$saved.minutes -ge 1) { $script:cfg.minutes = [int]$saved.minutes }
+    if ($null -ne $saved.alerts) { $script:cfg.alerts = [bool]$saved.alerts }
+  }
+} catch { }
+function Save-Settings { try { $script:cfg | ConvertTo-Json | Set-Content -Path $SettingsFile -Encoding UTF8 } catch { } }
+
+# 4x7 pixel digits, crisp at 16 px.
+$Glyphs = @{
+  '0' = @('0110', '1001', '1001', '1001', '1001', '1001', '0110'); '1' = @('0010', '0110', '0010', '0010', '0010', '0010', '0111')
+  '2' = @('0110', '1001', '0001', '0010', '0100', '1000', '1111'); '3' = @('1110', '0001', '0001', '0110', '0001', '0001', '1110')
+  '4' = @('0010', '0110', '1010', '1010', '1111', '0010', '0010'); '5' = @('1111', '1000', '1110', '0001', '0001', '1001', '0110')
+  '6' = @('0110', '1000', '1000', '1110', '1001', '1001', '0110'); '7' = @('1111', '0001', '0010', '0010', '0100', '0100', '0100')
+  '8' = @('0110', '1001', '1001', '0110', '1001', '1001', '0110'); '9' = @('0110', '1001', '1001', '0111', '0001', '0001', '0110')
+}
+
+function New-NumbersIcon([double]$a, [double]$b, [bool]$stale) {
+  $s = [System.Windows.Forms.SystemInformation]::SmallIconSize.Width
+  if ($s -lt 16) { $s = 16 }
+  $bmp = New-Object System.Drawing.Bitmap $s, $s
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.Clear([System.Drawing.Color]::Transparent)
+  $k = [int][Math]::Max(1, [Math]::Floor($s / 16))
+  $row = 0
+  foreach ($v in @($a, $b)) {
+    $txt = [string][int][Math]::Min(100, [Math]::Round($v))
+    $color = if ($stale) { $Colors.stale } else { $Colors[(Get-Level $v)] }
+    $brush = New-Object System.Drawing.SolidBrush $color
+    $w = $txt.Length * 4 + ($txt.Length - 1)
+    $x0 = [int][Math]::Floor(($s / $k - $w) / 2)
+    $y0 = 1 + $row * 8
+    for ($c = 0; $c -lt $txt.Length; $c++) {
+      $glyph = $Glyphs[[string]$txt[$c]]
+      for ($y = 0; $y -lt 7; $y++) {
+        for ($x = 0; $x -lt 4; $x++) {
+          if ($glyph[$y][$x] -eq '1') { $g.FillRectangle($brush, ($x0 + $c * 5 + $x) * $k, ($y0 + $y) * $k, $k, $k) }
+        }
+      }
+    }
+    $row++
+  }
+  $g.Dispose()
+  $handle = $bmp.GetHicon()
+  $bmp.Dispose()
+  return @{ Icon = [System.Drawing.Icon]::FromHandle($handle); Handle = $handle }
+}
 
 function New-BarsIcon([double]$a, [double]$b, [bool]$stale) {
   $s = [System.Windows.Forms.SystemInformation]::SmallIconSize.Width
@@ -112,9 +166,11 @@ function New-BarsIcon([double]$a, [double]$b, [bool]$stale) {
 }
 
 $tray = New-Object System.Windows.Forms.NotifyIcon
+$tray2 = New-Object System.Windows.Forms.NotifyIcon
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $itemOpen = $menu.Items.Add('Open Fuel Gauge', $null, { if ($script:url) { Start-Process $script:url } })
 $itemRefresh = $menu.Items.Add('Refresh now', $null, { Update-Tray })
+$itemSettings = $menu.Items.Add('Settings...', $null, { Show-Settings })
 $null = $menu.Items.Add('-')
 $itemQuit = $menu.Items.Add('Quit', $null, { $tray.Visible = $false; [System.Windows.Forms.Application]::Exit() })
 $itemInfo = New-Object System.Windows.Forms.ToolStripMenuItem
@@ -122,6 +178,8 @@ $itemInfo.Enabled = $false
 $menu.Items.Insert(0, $itemInfo)
 $menu.Items.Insert(1, (New-Object System.Windows.Forms.ToolStripSeparator))
 $tray.ContextMenuStrip = $menu
+$tray2.ContextMenuStrip = $menu
+$tray2.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
 $tray.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
 $script:lastLevel = @{}
 
@@ -153,7 +211,7 @@ function Update-Tray {
       if (-not $stale) {
         foreach ($pair in @(@('5h', $a), @((W).week, $b))) {
           $lvl = Get-Level $pair[1]
-          if ($lvl -eq 'crit' -and $script:lastLevel[$pair[0]] -ne 'crit') {
+          if ($script:cfg.alerts -and $lvl -eq 'crit' -and $script:lastLevel[$pair[0]] -ne 'crit') {
             $tray.ShowBalloonTip(6000, 'Fuel Gauge', "$($pair[0]) $((W).at) $(Format-Pct $pair[1])% $((W).of)", [System.Windows.Forms.ToolTipIcon]::Warning)
           }
           $script:lastLevel[$pair[0]] = $lvl
@@ -163,19 +221,72 @@ function Update-Tray {
   } catch { $text = (W).error }
   $itemInfo.Text = $info
   $itemOpen.Text = (W).open; $itemOpen.Enabled = [bool]$script:url
-  $itemRefresh.Text = (W).refresh; $itemQuit.Text = (W).quit
+  $itemRefresh.Text = (W).refresh; $itemQuit.Text = (W).quit; $itemSettings.Text = (W).settings
   if ($text.Length -gt 63) { $text = $text.Substring(0, 63) }
-  $new = New-BarsIcon $a $b $stale
+  $new = if ($script:cfg.mode -eq 'percent') { New-NumbersIcon $a $b $stale } else { New-BarsIcon $a $b $stale }
   $tray.Icon = $new.Icon
+  if ($script:cfg.mode -eq 'both') {
+    $n2 = New-NumbersIcon $a $b $stale
+    $tray2.Icon = $n2.Icon
+    $tray2.Text = $text
+    $tray2.Visible = $true
+    if ($script:lastHandle2 -ne [IntPtr]::Zero) { [void][FuelGauge.Native]::DestroyIcon($script:lastHandle2) }
+    $script:lastHandle2 = $n2.Handle
+  } else {
+    $tray2.Visible = $false
+  }
   $tray.Text = $text
   if ($script:lastHandle -ne [IntPtr]::Zero) { [void][FuelGauge.Native]::DestroyIcon($script:lastHandle) }
   $script:lastHandle = $new.Handle
 }
 
+function Show-Settings {
+  $f = New-Object System.Windows.Forms.Form
+  $f.Text = 'Fuel Gauge'
+  $f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false
+  $f.StartPosition = 'CenterScreen'; $f.TopMost = $true; $f.ShowInTaskbar = $false
+  $f.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+  $f.AutoScaleMode = 'Dpi'
+  $f.ClientSize = New-Object System.Drawing.Size(320, 236)
+  $grp = New-Object System.Windows.Forms.GroupBox
+  $grp.Text = (W).show; $grp.Location = New-Object System.Drawing.Point(12, 10); $grp.Size = New-Object System.Drawing.Size(296, 104)
+  $rb = @{}
+  $y = 22
+  foreach ($m in @('bars', 'percent', 'both')) {
+    $r = New-Object System.Windows.Forms.RadioButton
+    $r.Text = (W)[$m]; $r.AutoSize = $true; $r.Location = New-Object System.Drawing.Point(14, $y)
+    $r.Checked = ($script:cfg.mode -eq $m)
+    $grp.Controls.Add($r); $rb[$m] = $r; $y += 26
+  }
+  $lbl = New-Object System.Windows.Forms.Label
+  $lbl.Text = (W).every; $lbl.AutoSize = $true; $lbl.Location = New-Object System.Drawing.Point(14, 130)
+  $cb = New-Object System.Windows.Forms.ComboBox
+  $cb.DropDownStyle = 'DropDownList'; $cb.Location = New-Object System.Drawing.Point(150, 126); $cb.Width = 90
+  foreach ($n in @(1, 2, 5, 10)) { [void]$cb.Items.Add("$n $((W).minutes)") }
+  $cb.SelectedIndex = [Math]::Max(0, [Array]::IndexOf(@(1, 2, 5, 10), [int]$script:cfg.minutes))
+  $chk = New-Object System.Windows.Forms.CheckBox
+  $chk.Text = (W).alerts; $chk.AutoSize = $true; $chk.Location = New-Object System.Drawing.Point(14, 162); $chk.Checked = [bool]$script:cfg.alerts
+  $ok = New-Object System.Windows.Forms.Button
+  $ok.Text = (W).save; $ok.Location = New-Object System.Drawing.Point(140, 198); $ok.Width = 80; $ok.DialogResult = 'OK'
+  $no = New-Object System.Windows.Forms.Button
+  $no.Text = (W).cancel; $no.Location = New-Object System.Drawing.Point(228, 198); $no.Width = 80; $no.DialogResult = 'Cancel'
+  $f.AcceptButton = $ok; $f.CancelButton = $no
+  $f.Controls.AddRange(@($grp, $lbl, $cb, $chk, $ok, $no))
+  if ($f.ShowDialog() -eq 'OK') {
+    foreach ($m in $rb.Keys) { if ($rb[$m].Checked) { $script:cfg.mode = $m } }
+    $script:cfg.minutes = @(1, 2, 5, 10)[$cb.SelectedIndex]
+    $script:cfg.alerts = $chk.Checked
+    Save-Settings
+    $timer.Interval = $script:cfg.minutes * 60000
+    Update-Tray
+  }
+  $f.Dispose()
+}
+
 Update-Tray
 $tray.Visible = $true
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = $IntervalMs
+$timer.Interval = $script:cfg.minutes * 60000
 $timer.add_Tick({ Update-Tray })
 $timer.Start()
 [System.Windows.Forms.Application]::Run()
