@@ -1,0 +1,63 @@
+{
+  "name": "fuel-gauge",
+  "version": "0.1.0",
+  "description": "Unofficial fuel gauge for Claude: it knows its own 5-hour and weekly limits, shows them next to your prompt and hard-stops at 95% so you never get cut off mid-task.",
+  "author": {
+    "name": "LuisPCFialho",
+    "url": "https://github.com/LuisPCFialho"
+  },
+  "homepage": "https://github.com/LuisPCFialho/claude-fuel-gauge",
+  "repository": "https://github.com/LuisPCFialho/claude-fuel-gauge",
+  "license": "MIT",
+  "keywords": [
+    "usage",
+    "limits",
+    "rate-limit",
+    "tokens",
+    "status",
+    "productivity"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "Language of the bar, the panel and the notes Claude reads (en or pt for European Portuguese).",
+      "default": "en",
+      "options": [
+        "en",
+        "pt"
+      ]
+    },
+    "lockAt": {
+      "type": "number",
+      "title": "Hard stop at (%)",
+      "description": "When any usage window reaches this percentage, tools and new requests are blocked until you say \"continue\".",
+      "default": 95
+    },
+    "warnAt": {
+      "type": "string",
+      "title": "Warn at (%)",
+      "description": "Comma-separated percentages that raise a warning, e.g. 80,90.",
+      "default": "80,90"
+    },
+    "contextLine": {
+      "type": "boolean",
+      "title": "Tell Claude on every message",
+      "description": "Adds one short line with the limits to each message you send (about 50 tokens). Turn off to rely on the tool and the hard stop only.",
+      "default": true
+    },
+    "gaugeArtifactUrl": {
+      "type": "string",
+      "title": "Live gauge artifact URL (Cowork)",
+      "description": "Optional. A claude.ai artifact built from artifact/fuel-gauge.html; the plugin keeps its dials up to date.",
+      "default": ""
+    },
+    "trayFile": {
+      "type": "string",
+      "title": "Tray file path (Windows)",
+      "description": "Optional. Where to write usage.json for the Windows taskbar icon. Use one file per Claude account, e.g. C:\\Users\\you\\AppData\\Local\\FuelGauge\\usage.json.",
+      "default": ""
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "luispcfialho",
+  "description": "Plugins by LuisPCFialho for Claude Code and Cowork.",
+  "owner": {
+    "name": "LuisPCFialho",
+    "url": "https://github.com/LuisPCFialho"
+  },
+  "plugins": [
+    {
+      "name": "fuel-gauge",
+      "source": "./",
+      "description": "Unofficial fuel gauge for Claude: it knows its own 5-hour and weekly limits, shows them next to your prompt and hard-stops at 95%."
+    }
+  ]
+}

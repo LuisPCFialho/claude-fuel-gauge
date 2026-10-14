@@ -1,0 +1,193 @@
+<title>Fuel Gauge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one instrument cluster - status strip, two dials (5h / week), context strip, rules footer */
+:root {
+  --bg: #EEF0EC; --panel: #FAFBF8; --ink: #191D1A; --muted: #66706A; --line: #D5DAD3;
+  --needle: #D9822B; --ok: #2F8F5B; --warn: #B87E00; --crit: #CF3E3E; --track: #DDE2DA;
+  --f-display: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111412; --panel: #181C19; --ink: #E6EAE6; --muted: #8F9993; --line: #2A302C;
+  --needle: #F0A04B; --ok: #4FBF83; --warn: #E3B23C; --crit: #F06464; --track: #262C28; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111412; --panel: #181C19; --ink: #E6EAE6; --muted: #8F9993; --line: #2A302C;
+  --needle: #F0A04B; --ok: #4FBF83; --warn: #E3B23C; --crit: #F06464; --track: #262C28; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); }
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 20px 28px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 16px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--f-display); font-weight: 700; font-size: 1.35rem; letter-spacing: .02em; text-transform: uppercase; }
+.brand small { font-family: var(--f-mono); font-weight: 400; font-size: .7rem; color: var(--muted); letter-spacing: .04em; margin-left: 8px; text-transform: none; }
+.pill { font-family: var(--f-mono); font-size: .72rem; font-weight: 500; text-transform: uppercase; letter-spacing: .08em;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.crit { color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, transparent); }
+.lock { border: 1px solid var(--crit); background: color-mix(in srgb, var(--crit) 10%, var(--panel)); border-radius: 10px; padding: 12px 14px; font-size: .92rem; line-height: 1.45; }
+.lock strong { color: var(--crit); }
+.dials { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.dial { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dial h2 { margin: 0; font-family: var(--f-mono); font-weight: 500; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+.dial svg { width: 100%; height: auto; display: block; }
+.readout { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.big { font-family: var(--f-display); font-weight: 600; font-size: 2.4rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.big span { font-size: 1rem; color: var(--muted); font-weight: 500; margin-left: 4px; }
+.used { font-family: var(--f-mono); font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.reset { font-size: .85rem; color: var(--muted); }
+.reset b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.strip { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.strip .row { display: flex; justify-content: space-between; gap: 8px; font-size: .85rem; }
+.strip .row span:last-child { font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--needle); border-radius: 3px; transition: width .6s ease; }
+.foot { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+.foot code { font-family: var(--f-mono); font-size: .78rem; color: var(--ink); }
+.empty { background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; padding: 22px 18px; color: var(--muted); line-height: 1.5; font-size: .92rem; }
+.empty b { color: var(--ink); font-weight: 600; display: block; margin-bottom: 4px; font-size: 1rem; }
+@media (prefers-reduced-motion: reduce) { .bar i, .needle { transition: none !important; } }
+.needle { transition: transform .8s cubic-bezier(.2,.8,.2,1); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Fuel Gauge <small id="age"></small></div>
+    <span class="pill ok" id="state" hidden></span>
+  </header>
+  <div class="lock" id="lock" hidden></div>
+  <section id="dials" class="dials" aria-live="polite"></section>
+  <section class="strip" id="ctx" hidden>
+    <div class="row"><span id="ctxLabel"></span><span id="ctxVal"></span></div>
+    <div class="bar"><i id="ctxBar" style="width:0%"></i></div>
+  </section>
+  <div class="empty" id="empty"><b id="emptyTitle">Waiting for the first reading</b><span id="emptyText">Send a message in a session with the Fuel Gauge plugin and the dials fill in here, live.</span></div>
+  <p class="foot" id="rules"></p>
+</div>
+
+<script>
+(() => {
+  const T = {
+    en: { ok: "Plenty left", warn: "Getting low", crit: "Reserve", locked: "Locked", left: "left", used: "used",
+      reset: "Refills", in: "in", ctx: "Context window", updated: "updated", ago: "ago", now: "just now",
+      emptyT: "Waiting for the first reading", emptyX: "Send a message in a session with the Fuel Gauge plugin and the dials fill in here, live.",
+      lockMsg: (w, p) => `<strong>Hard stop at ${p}%.</strong> ${w} is in reserve. Claude stops and only goes on if you start your message with <code>continue</code>.`,
+      rules: (p) => `Hard stop at ${p}% of any window. Warnings at 80% and 90%. Values come from the last API response of your active session.`,
+      days: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], tomorrow: "tomorrow", today: "today", min: "min" },
+    pt: { ok: "Com margem", warn: "A ficar curto", crit: "Reserva", locked: "Bloqueado", left: "restante", used: "usado",
+      reset: "Repõe", in: "daqui a", ctx: "Janela de contexto", updated: "atualizado", ago: "", now: "agora mesmo",
+      emptyT: "À espera da primeira leitura", emptyX: "Envia uma mensagem numa sessão com o plugin Fuel Gauge e os mostradores enchem-se aqui, em direto.",
+      lockMsg: (w, p) => `<strong>Bloqueio rígido aos ${p}%.</strong> ${w} está na reserva. O Claude para e só continua se começares a mensagem com <code>continuar</code>.`,
+      rules: (p) => `Bloqueio rígido aos ${p}% de qualquer janela. Avisos aos 80% e 90%. Os valores vêm da última resposta da API da tua sessão ativa.`,
+      days: ["dom","seg","ter","qua","qui","sex","sáb"], tomorrow: "amanhã", today: "hoje", min: "min" },
+  };
+  let doc = null;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const pad = (n) => String(n).padStart(2, "0");
+  const t = () => T[doc && doc.lang === "pt" ? "pt" : "en"];
+  const fmtPct = (n) => { const s = Number.isInteger(n) ? String(n) : n.toFixed(1); return doc && doc.lang === "pt" ? s.replace(".", ",") : s; };
+
+  function span(ms) {
+    const m = Math.max(0, Math.round(ms / 60000));
+    if (m < 60) return `${m} ${t().min}`;
+    const h = Math.floor(m / 60);
+    return h < 24 ? `${h}h${pad(m % 60)}` : `${Math.floor(h / 24)}d ${h % 24}h`;
+  }
+  function when(iso) {
+    const d = new Date(iso), now = new Date();
+    const hh = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (d.toDateString() === now.toDateString()) return hh;
+    const tm = new Date(now); tm.setDate(now.getDate() + 1);
+    if (d.toDateString() === tm.toDateString()) return `${t().tomorrow} ${hh}`;
+    return `${t().days[d.getDay()]} ${hh}`;
+  }
+  function effective(w) {
+    if (w.resetsAt && Date.parse(w.resetsAt) <= Date.now()) return 0;
+    return w.percent;
+  }
+  function level(p, lockAt) { return p >= lockAt ? "crit" : p >= 80 ? "warn" : "ok"; }
+
+  // Fuel-gauge dial: E (empty) on the left, F (full) on the right; the needle shows what is LEFT.
+  function dialSvg(used, lockAt, lvl) {
+    const left = Math.max(0, Math.min(100, 100 - used));
+    const cx = 110, cy = 104, R = 84;
+    const pt = (f, r) => { const a = Math.PI - f * Math.PI; return [cx + r * Math.cos(a), cy - r * Math.sin(a)]; };
+    const arc = (f0, f1, r) => { const [x0, y0] = pt(f0, r), [x1, y1] = pt(f1, r); return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`; };
+    const reserve = (100 - lockAt) / 100;
+    let ticks = "";
+    for (let i = 0; i <= 8; i++) {
+      const f = i / 8, [x0, y0] = pt(f, R + 6), [x1, y1] = pt(f, R + (i % 4 === 0 ? 16 : 11));
+      ticks += `<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="var(--muted)" stroke-width="${i % 4 === 0 ? 2 : 1.2}" stroke-linecap="round"/>`;
+    }
+    const ang = -90 + (left / 100) * 180;
+    const fill = left > 0 ? `<path d="${arc(0, Math.max(left / 100, 0.004), R)}" fill="none" stroke="var(--${lvl === "ok" ? "ok" : lvl})" stroke-width="10" stroke-linecap="round" opacity=".9"/>` : "";
+    return `<svg viewBox="0 0 220 128" role="img" aria-label="${fmtPct(left)}% ${t().left}">
+      <path d="${arc(0, 1, R)}" fill="none" stroke="var(--track)" stroke-width="10" stroke-linecap="round"/>
+      <path d="${arc(0, reserve, R)}" fill="none" stroke="var(--crit)" stroke-width="10" opacity=".35"/>
+      ${fill}${ticks}
+      <text x="${(cx - R - 8).toFixed(0)}" y="124" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle">E</text>
+      <text x="${(cx + R + 8).toFixed(0)}" y="124" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle">F</text>
+      <g class="needle" style="transform-origin:${cx}px ${cy}px; transform: rotate(${ang.toFixed(1)}deg)">
+        <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - R + 14}" stroke="var(--needle)" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <circle cx="${cx}" cy="${cy}" r="7" fill="var(--panel)" stroke="var(--needle)" stroke-width="3"/>
+    </svg>`;
+  }
+
+  function render() {
+    const L = t();
+    document.documentElement.lang = doc && doc.lang === "pt" ? "pt-PT" : "en";
+    $("emptyTitle").textContent = L.emptyT; $("emptyText").textContent = L.emptyX;
+    const wins = (doc && Array.isArray(doc.windows)) ? doc.windows : [];
+    const lockAt = (doc && doc.lockAt) || 95;
+    $("rules").textContent = L.rules(lockAt);
+    $("empty").hidden = wins.length > 0;
+    $("dials").innerHTML = wins.map(w => {
+      const used = effective(w), lvl = level(used, lockAt), left = Math.max(0, 100 - used);
+      const r = w.resetsAt ? `<div class="reset">${L.reset} <b>${esc(when(w.resetsAt))}</b> · ${L.in} ${esc(span(Date.parse(w.resetsAt) - Date.now()))}</div>` : "";
+      return `<article class="dial"><h2><span>${esc(w.label || w.kind)}</span><span>${L[lvl]}</span></h2>${dialSvg(used, lockAt, lvl)}
+        <div class="readout"><div class="big">${fmtPct(left)}<span>% ${L.left}</span></div><div class="used">${fmtPct(used)}% ${L.used}</div></div>${r}</article>`;
+    }).join("");
+    const worst = wins.reduce((a, w) => (!a || effective(w) > effective(a) ? w : a), null);
+    const pill = $("state");
+    if (worst) {
+      const p = effective(worst), lvl = (doc.locked && p >= lockAt) ? "crit" : level(p, lockAt);
+      pill.hidden = false; pill.className = `pill ${lvl}`;
+      pill.textContent = doc.locked && p >= lockAt ? L.locked : L[lvl];
+      $("lock").hidden = !(doc.locked && p >= lockAt);
+      if (!$("lock").hidden) $("lock").innerHTML = L.lockMsg(esc(worst.label || worst.kind), lockAt);
+    } else { pill.hidden = true; $("lock").hidden = true; }
+    const c = doc && doc.context;
+    $("ctx").hidden = !(c && typeof c.percent === "number");
+    if (!$("ctx").hidden) {
+      $("ctxLabel").textContent = L.ctx;
+      const k = (n) => n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+      $("ctxVal").textContent = `${c.percent}%${c.tokens ? ` · ${k(c.tokens)} / ${k(c.window)}` : ""}`;
+      $("ctxBar").style.width = `${Math.min(100, c.percent)}%`;
+    }
+    if (doc && doc.updatedAt) {
+      const s = Math.round((Date.now() - doc.updatedAt) / 1000);
+      $("age").textContent = s < 60 ? `${L.updated} ${L.now}` : (doc.lang === "pt" ? `${L.updated} há ${span(s * 1000)}` : `${L.updated} ${span(s * 1000)} ${L.ago}`);
+    } else $("age").textContent = "";
+  }
+
+  render();
+  setInterval(render, 30000);
+
+  (async () => {
+    if (!window.claude || !window.claude.use) return;
+    const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+    if (!db || !user) return;
+    const id = await user.id();
+    if (!id) return;
+    db.doc(`data/users/${id}/gauge`).onSnapshot((snap) => {
+      doc = snap.exists ? snap.data() : null;
+      render();
+    }, () => {});
+  })();
+})();
+</script>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="150" viewBox="0 0 560 150" role="img" aria-label="Windows taskbar icon: two bars, 5-hour window and week, next to the clock">
+  <rect width="560" height="150" rx="14" fill="#1C1F24"/>
+  <text x="28" y="38" fill="#7A818C" font-family="'Segoe UI', Arial, sans-serif" font-size="14" letter-spacing="2">WINDOWS TASKBAR</text>
+  <g transform="translate(40 58)">
+    <rect x="0" y="0" width="22" height="56" fill="none" stroke="#D8DCE2" stroke-opacity=".7" stroke-width="2"/>
+    <rect x="4" y="44" width="14" height="8" fill="#3FB950"/>
+    <rect x="34" y="0" width="22" height="56" fill="none" stroke="#D8DCE2" stroke-opacity=".7" stroke-width="2"/>
+    <rect x="38" y="20" width="14" height="32" fill="#E3B341"/>
+    <text x="11" y="78" fill="#7A818C" font-family="Consolas, Menlo, monospace" font-size="12" text-anchor="middle">5h</text>
+    <text x="45" y="78" fill="#7A818C" font-family="Consolas, Menlo, monospace" font-size="12" text-anchor="middle">week</text>
+  </g>
+  <g font-family="'Segoe UI', Arial, sans-serif">
+    <rect x="132" y="54" width="300" height="44" rx="6" fill="#2B2F36" stroke="#3A3F47"/>
+    <text x="146" y="82" fill="#E6E9EE" font-size="15">5h 18% (17:00) | Week 79% (Sat 06:00)</text>
+    <text x="474" y="72" fill="#E6E9EE" font-size="15" text-anchor="middle">12:13</text>
+    <text x="474" y="92" fill="#E6E9EE" font-size="13" text-anchor="middle">14/10/2026</text>
+  </g>
+</svg>

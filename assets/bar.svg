@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="190" viewBox="0 0 960 190" role="img" aria-label="The bar above the prompt: 5h 23 percent, week 78 percent, context 31 percent">
+  <rect width="960" height="190" rx="14" fill="#0F1211"/>
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="17">
+    <text x="32" y="40" fill="#5E6863" font-size="14" letter-spacing="2">ABOVE THE PROMPT</text>
+
+    <text x="32" y="82" fill="#E6EAE6" font-weight="600">5h</text>
+    <rect x="62" y="72" width="80" height="8" rx="4" fill="#2A302C"/>
+    <rect x="62" y="72" width="18.4" height="8" rx="4" fill="#5B8DEF"/>
+    <text x="152" y="82" fill="#E6EAE6" font-weight="700">23%</text>
+    <text x="196" y="82" fill="#8F9993">17:00</text>
+
+    <text x="272" y="82" fill="#E6EAE6" font-weight="600">Week</text>
+    <rect x="322" y="72" width="80" height="8" rx="4" fill="#2A302C"/>
+    <rect x="322" y="72" width="62.4" height="8" rx="4" fill="#E0A100"/>
+    <text x="412" y="82" fill="#E3B23C" font-weight="700">78%</text>
+    <text x="456" y="82" fill="#8F9993">Sat 06:00</text>
+
+    <text x="560" y="82" fill="#E6EAE6" font-weight="600">Context</text>
+    <text x="640" y="82" fill="#8F9993">31%</text>
+
+    <text x="712" y="82" fill="#8F9993" text-decoration="underline">Details</text>
+  </g>
+  <rect x="24" y="108" width="912" height="56" rx="12" fill="#181C19" stroke="#2F3632"/>
+  <text x="48" y="142" fill="#5E6863" font-family="'Segoe UI', Arial, sans-serif" font-size="17">Ask Claude to refactor the billing module...</text>
+</svg>
