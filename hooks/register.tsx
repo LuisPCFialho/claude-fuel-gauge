@@ -40,7 +40,7 @@ function readConfig(o: PluginOptions): Config {
   }
 }
 
-const VERSION = '0.3.0'
+const VERSION = '0.3.1'
 const REPO = 'LuisPCFialho/claude-fuel-gauge'
 const PANE = 'fuel-gauge'
 const TOOL = 'limits'
@@ -472,6 +472,8 @@ async function payload($: EngineInterface, c: Config, w: Words) {
     gaugeUrl: c.gaugeUrl || null,
     windows: s.r.windows.map(f => ({ kind: f.kind, label: label(f.kind, w), percent: f.percentUsed, resetsAt: f.resetsAt ?? null, note: outlook(h, f, s.now, c, w) || null, ...outlookData(h, f, s.now, c) })),
     context: { percent: s.r.ctxPercent ?? null, tokens: s.r.ctxTokens ?? null, window: s.r.ctxWindow },
+    version: VERSION,
+    latest: await read($, newVersion),
     lastCost: costText(await read($, lastCost), c, w) || null,
     cost: await read($, lastCost),
   }
