@@ -16,7 +16,7 @@ $id = [BitConverter]::ToString([Security.Cryptography.SHA1]::Create().ComputeHas
 $mutex = New-Object System.Threading.Mutex($false, "Local\FuelGaugeTray-$id")
 if (-not $mutex.WaitOne(0)) { exit }
 
-$TrayVersion = '0.3.1'
+$TrayVersion = '0.3.2'
 $IntervalMs = 120000
 # Without new readings nothing was used, so the figures stay right; windows
 # that pass their reset time drop to 0. Grey only after a full week of silence.
@@ -174,6 +174,46 @@ function New-BarsIcon([double]$a, [double]$b, [bool]$stale) {
   return @{ Icon = [System.Drawing.Icon]::FromHandle($handle); Handle = $handle }
 }
 
+# Windows notifications under our own name and icon ("Fuel Gauge", two bars)
+# instead of "Windows PowerShell": a per-user app id with a display name and
+# icon, registered once, then modern toasts. Falls back to the old balloon.
+$Aumid = 'LuisPCFialho.FuelGauge'
+function Register-ToastIdentity {
+  try {
+    $png = Join-Path (Split-Path $DataFile) 'fuel-gauge.png'
+    if (-not (Test-Path $png)) {
+      $bmp = New-Object System.Drawing.Bitmap 64, 64
+      $g = [System.Drawing.Graphics]::FromImage($bmp)
+      $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+      $g.Clear([System.Drawing.Color]::Transparent)
+      $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70, 128, 128, 128))), 10, 6, 18, 52)
+      $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70, 128, 128, 128))), 36, 6, 18, 52)
+      $g.FillRectangle((New-Object System.Drawing.SolidBrush $Colors.ok), 12, 38, 14, 18)
+      $g.FillRectangle((New-Object System.Drawing.SolidBrush $Colors.warn), 38, 18, 14, 38)
+      $g.DrawRectangle((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(200, 220, 220, 220)), 2), 10, 6, 18, 52)
+      $g.DrawRectangle((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(200, 220, 220, 220)), 2), 36, 6, 18, 52)
+      $g.Dispose(); $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    }
+    $key = "HKCU:\Software\Classes\AppUserModelId\$Aumid"
+    if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+    Set-ItemProperty -Path $key -Name DisplayName -Value 'Fuel Gauge'
+    Set-ItemProperty -Path $key -Name IconUri -Value $png
+  } catch { }
+}
+
+function Show-Notice([string]$text, [string]$kind = 'Info') {
+  try {
+    [void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+    [void][Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
+    $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+    $xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>$([Security.SecurityElement]::Escape($text))</text></binding></visual></toast>")
+    [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($Aumid).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
+  } catch {
+    $tray.ShowBalloonTip(6000, 'Fuel Gauge', $text, [System.Windows.Forms.ToolTipIcon]::$kind)
+  }
+}
+
+Register-ToastIdentity
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray2 = New-Object System.Windows.Forms.NotifyIcon
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -256,14 +296,14 @@ function Update-Tray {
         foreach ($r in @(@('five', $a, $five, (W).resetFive), @('week', $b, $week, (W).resetWeek))) {
           $prev = $script:lastValue[$r[0]]
           if ($r[2] -and $script:cfg.alerts -and $null -ne $prev -and $prev -ge 5 -and $r[1] -eq 0) {
-            $tray.ShowBalloonTip(6000, 'Fuel Gauge', $r[3], [System.Windows.Forms.ToolTipIcon]::Info)
+            Show-Notice $r[3] 'Info'
           }
           if ($r[2]) { $script:lastValue[$r[0]] = $r[1] }
         }
         foreach ($pair in @(@('5h', $a), @((W).week, $b))) {
           $lvl = Get-Level $pair[1]
           if ($script:cfg.alerts -and $lvl -eq 'crit' -and $script:lastLevel[$pair[0]] -ne 'crit') {
-            $tray.ShowBalloonTip(6000, 'Fuel Gauge', "$($pair[0]) $((W).at) $(Format-Pct $pair[1])% $((W).of)", [System.Windows.Forms.ToolTipIcon]::Warning)
+            Show-Notice "$($pair[0]) $((W).at) $(Format-Pct $pair[1])% $((W).of)" 'Warning'
           }
           $script:lastLevel[$pair[0]] = $lvl
         }
