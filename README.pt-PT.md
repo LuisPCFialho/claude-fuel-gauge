@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge.plugin"><img alt="Download fuel-gauge.plugin for Cowork" src="https://img.shields.io/badge/Download-fuel--gauge.plugin-D9822B?style=for-the-badge"></a>
   <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-pt.plugin"><img alt="Descarregar em português" src="https://img.shields.io/badge/Descarregar-PT--PT-5B8DEF?style=for-the-badge"></a>
+  <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-tray-windows.zip"><img alt="Ícone da barra do Windows" src="https://img.shields.io/badge/Windows-%C3%ADcone%20da%20barra-3FB950?style=for-the-badge"></a>
 </p>
 
 **Deixa de vigiar os limites à mão.** Acabou o "já vais em 80%, despacha" e as tarefas longas que morrem nos 100% a meio de uma alteração.
@@ -20,6 +21,8 @@ O `fuel-gauge` dá ao Claude noção dos próprios limites. Lê a janela de 5 ho
 - **Bloqueio rígido aos 95%:** as ferramentas (incluindo subagentes) e os pedidos novos são recusados. O Claude para, faz um resumo do que ficou feito e do que falta, e só continua quando começas a mensagem com `continuar` ou carregas em **Desbloquear 1 pedido**. O bloqueio levanta-se sozinho quando a janela é reposta.
 - **Ritmo e orçamento:** `5h 18% (ritmo 6%/h, 95% às 16:20)` e `Semana 60% (~13%/dia até lá)`. O Claude sabe se uma tarefa cabe antes de a começar.
 - **Custo de cada pedido:** `último pedido: 5h +2%, Semana +1%`, para o Claude (e tu) saberem quanto pesa cada tipo de tarefa.
+- **Aviso de sessão cara:** quando um pedido gasta 3% ou mais da janela de 5h e o contexto passa dos 50%, o Claude sugere um chat novo ou `/compact` num ponto natural.
+- **Aviso de versão nova:** uma vez por dia o plugin vê a versão no GitHub (um pedido pequeno, sem tokens) e o Claude avisa-te uma vez.
 - **Avisos aos 80% e 90%**, também a meio de uma tarefa longa.
 - **Medidor para o Cowork** (opcional): um artifact do claude.ai com dois mostradores que se atualizam depois de cada resposta.
 - **Ícone na barra do Windows** (opcional): duas barras pequenas junto ao relógio.
@@ -57,9 +60,7 @@ Na app de desktop: **+** junto à caixa de texto, **Plugins**, **Add marketplace
 
 ## Ícone na barra do Windows
 
-```
-powershell -ExecutionPolicy Bypass -File tray\windows\install.ps1
-```
+Descarrega o [`fuel-gauge-tray-windows.zip`](https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-tray-windows.zip), extrai e faz duplo clique em **install-tray.cmd**. Com o botão direito no ícone abres as **Definições**: barras, percentagem ou ambos, idioma (segue o Windows por defeito) e avisos, incluindo quando uma janela é reposta.
 
 Com duas contas do Claude (trabalho e pessoal), usa um ícone e um ficheiro para cada uma, para nunca se misturarem: `-Name trabalho` e `-Name pessoal`.
 

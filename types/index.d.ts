@@ -24,6 +24,8 @@ declare module 'claude-code' {
       samples: FuelHistory
       turnStart: Record<string, number> | null
       lastCost: Record<string, number> | null
+      newVersion: string | null
+      announced: boolean
     }
   }
 }

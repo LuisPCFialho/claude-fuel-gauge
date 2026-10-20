@@ -40,6 +40,8 @@ function readConfig(o: PluginOptions): Config {
   }
 }
 
+const VERSION = '0.3.0'
+const REPO = 'LuisPCFialho/claude-fuel-gauge'
 const PANE = 'fuel-gauge'
 const TOOL = 'limits'
 const TOOL_FULL = 'mcp__fuel-gauge__limits'
@@ -56,6 +58,8 @@ const gaugeVersion = atom({ plugin: 'fuel-gauge', key: 'gaugeVersion' } as const
 const samples = atom({ plugin: 'fuel-gauge', key: 'samples' } as const, {})
 const turnStart = atom({ plugin: 'fuel-gauge', key: 'turnStart' } as const, null)
 const lastCost = atom({ plugin: 'fuel-gauge', key: 'lastCost' } as const, null)
+const newVersion = atom({ plugin: 'fuel-gauge', key: 'newVersion' } as const, null)
+const announced = atom({ plugin: 'fuel-gauge', key: 'announced' } as const, false)
 
 // --- Words -------------------------------------------------------------------
 
@@ -71,7 +75,10 @@ const WORDS = {
     noReading: 'account limits: no reading yet',
     context: (p: number, w: string) => `context ${p}% of ${w}`,
     hardStop: (n: number) => `hard stop at ${n}%`,
-    old: (a: string) => `reading from ${a} ago; usage elsewhere since then is not counted yet`,
+    old: (a: string) => `reading from ${a} ago`,
+    heavy: (x: string, ctx: number) => `[Fuel gauge] Costly session: the last request used ${x}% of the 5-hour window with the context at ${ctx}%. At a natural break, suggest the user start a new chat or run /compact.`,
+    update: (v: string, cur: string) => `[Fuel gauge] Version ${v} of the plugin is available (this is ${cur}). Tell the user once, in one short line, with this link: https://github.com/${REPO}/releases/latest`,
+    version: (cur: string, v: string | null) => `Plugin ${cur}${v ? ` (new version ${v} available)` : ''}.`,
     pace: (r: string) => `pace ${r}%/h`,
     hitsAt: (n: number, at: string) => `${n}% at ${at}`,
     safe: (n: number) => `won't reach ${n}% before the reset`,
@@ -113,7 +120,10 @@ const WORDS = {
     noReading: 'limites da conta: ainda sem leitura',
     context: (p: number, w: string) => `contexto ${p}% de ${w}`,
     hardStop: (n: number) => `bloqueio rígido aos ${n}%`,
-    old: (a: string) => `leitura de há ${a}; uso noutros sítios desde então ainda não está contado`,
+    old: (a: string) => `leitura de há ${a}`,
+    heavy: (x: string, ctx: number) => `[Medidor de limites] Sessão cara: o último pedido gastou ${x}% da janela de 5h com o contexto a ${ctx}%. Num ponto natural, sugere ao utilizador abrir um chat novo ou fazer /compact.`,
+    update: (v: string, cur: string) => `[Medidor de limites] Há uma versão nova do plugin, a ${v} (esta é a ${cur}). Diz isso ao utilizador uma vez, numa linha curta, com este link: https://github.com/${REPO}/releases/latest`,
+    version: (cur: string, v: string | null) => `Plugin ${cur}${v ? ` (há versão nova: ${v})` : ''}.`,
     pace: (r: string) => `ritmo ${r}%/h`,
     hitsAt: (n: number, at: string) => `${n}% às ${at}`,
     safe: (n: number) => `não chega aos ${n}% antes do reset`,
@@ -329,6 +339,41 @@ async function record($: EngineInterface, windows: FuelWindow[], now: number): P
   })
 }
 
+function isNewer(a: string, b: string): boolean {
+  const x = a.split('.').map(Number)
+  const y = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0)
+    if (d !== 0) return d > 0
+  }
+  return false
+}
+
+// Latest release on GitHub, at most once a day per machine. No model tokens.
+async function checkVersion($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+  let latest: string | undefined
+  try {
+    const last = (await $.store.get('versionCheck')) as { at?: number; latest?: string } | undefined
+    if (last && typeof last.at === 'number' && now - last.at < 86_400_000 && last.latest) latest = last.latest
+  } catch {
+    // no store
+  }
+  if (latest === undefined) {
+    // The manifest on main (raw files are not rate-limited like the API).
+    const r = await $.http.fetch(`https://raw.githubusercontent.com/${REPO}/main/.claude-plugin/plugin.json`)
+    if (!r.ok) throw new Error(`GitHub ${r.status}`)
+    latest = String((JSON.parse(r.text) as { version?: string }).version ?? '')
+    try {
+      await $.store.set('versionCheck', { at: now, latest })
+    } catch {
+      // no store
+    }
+  }
+  const found = latest && isNewer(latest, VERSION) ? latest : null
+  await update($, newVersion, () => found)
+}
+
 const kTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
 function modelLine(r: FuelReading | null, now: number, c: Config, w: Words, h?: FuelHistory, cost?: Record<string, number> | null): string {
@@ -344,7 +389,7 @@ function modelLine(r: FuelReading | null, now: number, c: Config, w: Words, h?: 
   if (parts.length === 0) parts.push(w.noReading)
   if (r?.ctxPercent !== undefined) parts.push(w.context(r.ctxPercent, kTokens(r.ctxWindow)))
   if (r && r.windows.length > 0 && now - r.readAt > 15 * 60_000) parts.push(w.old(span(now - r.readAt)))
-  return `[${w.prefix}, ${clock(now, c.lang)}] ${parts.join(' | ')} | ${w.hardStop(c.lockAt)}`
+  return `[${w.prefix}, ${clock(now, c.lang)}] ${parts.join(' | ')}`
 }
 
 function why(top: { win: FuelWindow; value: number }, now: number, c: Config, w: Words): string {
@@ -523,6 +568,13 @@ export const register: Register = (on, options) => {
       // no reading yet: the first API response brings the values
     }
     await seed($, c)
+    try {
+      await checkVersion($)
+      const v = await read($, newVersion)
+      if (v) $.ui.toast(`Fuel Gauge ${v}: https://github.com/${REPO}/releases/latest`)
+    } catch {
+      // offline or no access to GitHub
+    }
     return next(e)
   })
 
@@ -603,6 +655,14 @@ export const register: Register = (on, options) => {
     const extra: string[] = []
     if (c.contextLine) extra.push(modelLine(s.r, s.now, c, w, await read($, samples), await read($, lastCost)))
     if (goAhead && s.top && s.top.value >= c.lockAt) extra.push(w.allowed(c.lockAt))
+    const cost = await read($, lastCost)
+    const fiveCost = cost?.five_hour ?? Math.max(0, ...Object.values(cost ?? {}))
+    if (fiveCost >= 3 && (s.r?.ctxPercent ?? 0) >= 50) extra.push(w.heavy(pct(Math.round(fiveCost * 10) / 10, c), s.r?.ctxPercent ?? 0))
+    const v = await read($, newVersion)
+    if (v && !(await read($, announced))) {
+      extra.push(w.update(v, VERSION))
+      await update($, announced, () => true)
+    }
     if (extra.length === 0) return next(e)
     return next({ ...e, context: [...(e.context ?? []), ...extra] })
   }).catch(($, e, next) => next(e))
@@ -628,6 +688,7 @@ export const register: Register = (on, options) => {
     if (s.locked) lines.push(w.stateLocked)
     else if (s.free) lines.push(w.stateUnlocked)
     if (errors.length > 0) lines.push(`(${errors.join('; ')})`)
+    lines.push(w.version(VERSION, await read($, newVersion)))
     return { result: lines.join('\n') }
   })
 

@@ -22,8 +22,8 @@ $IntervalMs = 120000
 $StaleMinutes = 10080
 $aa = [char]0x00E1; $at = [char]0x00E3; $ii = [char]0x00ED; $cc = [char]0x00E7; $ot = [char]0x00F5; $ee = [char]0x00EA; $ea = [char]0x00E9; $ag = [char]0x00E0; $ua = [char]0x00FA
 $Words = @{
-  en = @{ days = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); tomorrow = 'tomorrow'; week = 'Week'; stale = 'No data for a week.'; ago = 'ago'; updated = 'updated'; locked = 'LOCKED.'; none = 'Fuel Gauge: no data yet'; error = 'Fuel Gauge: could not read data'; open = 'Open Fuel Gauge'; refresh = 'Refresh now'; quit = 'Quit'; at = 'at'; of = 'of the limit'; settings = 'Settings...'; show = 'Show in the taskbar'; bars = 'Bars'; percent = 'Percentage'; both = 'Bars and percentage (two icons)'; every = 'Recheck resets every'; minutes = 'min'; alerts = 'Notify above 90%'; save = 'Save'; cancel = 'Cancel'; language = 'Language'; auto = 'Automatic (Windows)'; pace = 'pace'; hits = 'at'; safe = "won't reach"; before = 'before the reset'; perDay = '/day until then'; last = 'last request'; tiny = 'under 1%' }
-  pt = @{ days = @('dom', 'seg', 'ter', 'qua', 'qui', 'sex', "s$($aa)b"); tomorrow = "amanh$at"; week = 'Semana'; stale = "Sem dados h$($aa) uma semana."; ago = "h$($aa)"; updated = 'atualizado'; locked = 'BLOQUEADO.'; none = 'Fuel Gauge: sem dados ainda'; error = 'Fuel Gauge: erro a ler os dados'; open = 'Abrir Fuel Gauge'; refresh = 'Atualizar agora'; quit = 'Sair'; at = 'a'; of = 'do limite'; settings = "Defini$($cc)$($ot)es..."; show = 'Mostrar na barra'; bars = 'Barras'; percent = 'Percentagem'; both = "Barras e percentagem (dois $($ii)cones)"; every = 'Rever resets a cada'; minutes = 'min'; alerts = 'Avisar acima de 90%'; save = 'Guardar'; cancel = 'Cancelar'; language = 'Idioma'; auto = "Autom$($aa)tico (Windows)"; pace = 'ritmo'; hits = "$($ag)s"; safe = "n$($at)o chega aos"; before = 'antes do reset'; perDay = "/dia at$($ea) l$($aa)"; last = "$($ua)ltimo pedido"; tiny = 'menos de 1%' }
+  en = @{ days = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); tomorrow = 'tomorrow'; week = 'Week'; stale = 'No data for a week.'; ago = 'ago'; updated = 'updated'; locked = 'LOCKED.'; none = 'Fuel Gauge: no data yet'; error = 'Fuel Gauge: could not read data'; open = 'Open Fuel Gauge'; refresh = 'Refresh now'; quit = 'Quit'; at = 'at'; of = 'of the limit'; settings = 'Settings...'; show = 'Show in the taskbar'; bars = 'Bars'; percent = 'Percentage'; both = 'Bars and percentage (two icons)'; every = 'Recheck resets every'; minutes = 'min'; alerts = 'Notify above 90%'; save = 'Save'; cancel = 'Cancel'; language = 'Language'; auto = 'Automatic (Windows)'; pace = 'pace'; hits = 'at'; safe = "won't reach"; before = 'before the reset'; perDay = '/day until then'; last = 'last request'; tiny = 'under 1%'; resetFive = '5-hour window reset: full tank again'; resetWeek = 'Weekly window reset: full tank again' }
+  pt = @{ days = @('dom', 'seg', 'ter', 'qua', 'qui', 'sex', "s$($aa)b"); tomorrow = "amanh$at"; week = 'Semana'; stale = "Sem dados h$($aa) uma semana."; ago = "h$($aa)"; updated = 'atualizado'; locked = 'BLOQUEADO.'; none = 'Fuel Gauge: sem dados ainda'; error = 'Fuel Gauge: erro a ler os dados'; open = 'Abrir Fuel Gauge'; refresh = 'Atualizar agora'; quit = 'Sair'; at = 'a'; of = 'do limite'; settings = "Defini$($cc)$($ot)es..."; show = 'Mostrar na barra'; bars = 'Barras'; percent = 'Percentagem'; both = "Barras e percentagem (dois $($ii)cones)"; every = 'Rever resets a cada'; minutes = 'min'; alerts = 'Avisar acima de 90%'; save = 'Guardar'; cancel = 'Cancelar'; language = 'Idioma'; auto = "Autom$($aa)tico (Windows)"; pace = 'ritmo'; hits = "$($ag)s"; safe = "n$($at)o chega aos"; before = 'antes do reset'; perDay = "/dia at$($ea) l$($aa)"; last = "$($ua)ltimo pedido"; tiny = 'menos de 1%'; resetFive = "Janela de 5h reposta: podes avan$($cc)ar"; resetWeek = "Semana reposta: podes avan$($cc)ar" }
 }
 $Colors = @{
   ok    = [System.Drawing.Color]::FromArgb(63, 185, 80)
@@ -192,6 +192,7 @@ $tray2.ContextMenuStrip = $menu
 $tray2.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
 $tray.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
 $script:lastLevel = @{}
+$script:lastValue = @{}
 
 # The icon follows the data file: it redraws within seconds of each write
 # (every Claude reply), and every few minutes so ages and resets stay right.
@@ -247,6 +248,14 @@ function Update-Tray {
       if ($stale) { $text = "$((W).stale) $text" }
       if ($d.locked) { $text = "$((W).locked) $text" }
       if (-not $stale) {
+        # A window that drops to 0 after being used has just reset.
+        foreach ($r in @(@('five', $a, $five, (W).resetFive), @('week', $b, $week, (W).resetWeek))) {
+          $prev = $script:lastValue[$r[0]]
+          if ($r[2] -and $script:cfg.alerts -and $null -ne $prev -and $prev -ge 5 -and $r[1] -eq 0) {
+            $tray.ShowBalloonTip(6000, 'Fuel Gauge', $r[3], [System.Windows.Forms.ToolTipIcon]::Info)
+          }
+          if ($r[2]) { $script:lastValue[$r[0]] = $r[1] }
+        }
         foreach ($pair in @(@('5h', $a), @((W).week, $b))) {
           $lvl = Get-Level $pair[1]
           if ($script:cfg.alerts -and $lvl -eq 'crit' -and $script:lastLevel[$pair[0]] -ne 'crit') {

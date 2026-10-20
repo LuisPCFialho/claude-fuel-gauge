@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge.plugin"><img alt="Download fuel-gauge.plugin for Cowork" src="https://img.shields.io/badge/Download-fuel--gauge.plugin-D9822B?style=for-the-badge"></a>
+  <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-tray-windows.zip"><img alt="Windows taskbar icon" src="https://img.shields.io/badge/Windows-taskbar%20icon-3FB950?style=for-the-badge"></a>
   <a href="https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-pt.plugin"><img alt="Descarregar em português" src="https://img.shields.io/badge/Descarregar-PT--PT-5B8DEF?style=for-the-badge"></a>
 </p>
 
@@ -27,6 +28,7 @@
 | **Hard stop at 95%** | Past the threshold, tool calls (subagents included) and new requests are refused. Claude stops, gives a short summary of what is done and what is left, and goes on only when you start a message with `continue` or press **Unlock 1 request**. The lock lifts by itself when the window resets. |
 | **Pace and budget** | `5h 18% (resets 17:00; pace 6%/h, 95% at 16:20)` and `Week 60% (~13%/day until then)`. Claude knows whether a task fits before it starts. |
 | **Cost per request** | `last request: 5h +2%, Week +1%`, so Claude (and you) learn what each kind of task costs. |
+| **Costly-session nudge** | When one request eats 3% or more of the 5-hour window and the context is past 50%, Claude suggests a new chat or `/compact` at a natural break. |
 | **Warnings at 80% and 90%** | A toast for you and a note for Claude, even in the middle of a long turn. |
 | **Cowork gauge (optional)** | A live claude.ai artifact with two fuel dials that update after every response. |
 | **Windows taskbar icon (optional)** | Two tiny bars next to the clock. Hover for the numbers, double-click for the gauge. |
@@ -105,11 +107,9 @@ Cowork has no place for plugins to draw next to the prompt, so the bar does not 
 
 ## Windows taskbar icon
 
-```
-powershell -ExecutionPolicy Bypass -File tray\windows\install.ps1
-```
+Download [`fuel-gauge-tray-windows.zip`](https://github.com/LuisPCFialho/claude-fuel-gauge/releases/latest/download/fuel-gauge-tray-windows.zip), extract it and double-click **install-tray.cmd**. Right-click the icon for **Settings**: bars, percentage or both, language (follows Windows by default) and alerts, including a notice when a window resets.
 
-This copies the script to `%LOCALAPPDATA%\FuelGauge`, adds a Startup shortcut and starts it. Set the path it prints as the `trayFile` option. Windows 11 hides new tray icons behind the **^** arrow: drag the icon to the taskbar once.
+The installer copies the script to `%LOCALAPPDATA%\FuelGauge`, adds a Startup shortcut and starts it. Set the path it prints as the `trayFile` option. Windows 11 hides new tray icons behind the **^** arrow: drag the icon to the taskbar once.
 
 Using two Claude accounts (work and personal)? Give each its own icon and file so they never mix:
 
@@ -125,6 +125,8 @@ powershell -ExecutionPolicy Bypass -File tray\windows\install.ps1 -Name personal
 **Why 95%?** It leaves room for Claude to write a clean summary before the window runs dry. Set `lockAt` to whatever suits you.
 
 **Can Claude get around the stop?** No. The stop sits in the plugin's `tool.call` and `prompt.submit` hooks, outside the model. Only you can unlock it, one request at a time.
+
+**How do I know there is a new version?** Once a day the plugin reads the version on GitHub (one small request, no tokens) and Claude tells you once.
 
 **Is this an Anthropic product?** No. It is an independent, unofficial plugin and is not affiliated with or endorsed by Anthropic.
 
