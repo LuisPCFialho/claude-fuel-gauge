@@ -20,10 +20,10 @@ $IntervalMs = 120000
 # Without new readings nothing was used, so the figures stay right; windows
 # that pass their reset time drop to 0. Grey only after a full week of silence.
 $StaleMinutes = 10080
-$aa = [char]0x00E1; $at = [char]0x00E3; $ii = [char]0x00ED; $cc = [char]0x00E7; $ot = [char]0x00F5
+$aa = [char]0x00E1; $at = [char]0x00E3; $ii = [char]0x00ED; $cc = [char]0x00E7; $ot = [char]0x00F5; $ee = [char]0x00EA; $ea = [char]0x00E9; $ag = [char]0x00E0; $ua = [char]0x00FA
 $Words = @{
-  en = @{ days = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); tomorrow = 'tomorrow'; week = 'Week'; stale = 'No data for a week.'; ago = 'ago'; updated = 'updated'; locked = 'LOCKED.'; none = 'Fuel Gauge: no data yet'; error = 'Fuel Gauge: could not read data'; open = 'Open Fuel Gauge'; refresh = 'Refresh now'; quit = 'Quit'; at = 'at'; of = 'of the limit'; settings = 'Settings...'; show = 'Show in the taskbar'; bars = 'Bars'; percent = 'Percentage'; both = 'Bars and percentage (two icons)'; every = 'Refresh every'; minutes = 'min'; alerts = 'Notify above 90%'; save = 'Save'; cancel = 'Cancel' }
-  pt = @{ days = @('dom', 'seg', 'ter', 'qua', 'qui', 'sex', "s$($aa)b"); tomorrow = "amanh$at"; week = 'Semana'; stale = "Sem dados h$($aa) uma semana."; ago = "h$($aa)"; updated = 'atualizado'; locked = 'BLOQUEADO.'; none = 'Fuel Gauge: sem dados ainda'; error = 'Fuel Gauge: erro a ler os dados'; open = 'Abrir Fuel Gauge'; refresh = 'Atualizar agora'; quit = 'Sair'; at = 'a'; of = 'do limite'; settings = "Defini$($cc)$($ot)es..."; show = 'Mostrar na barra'; bars = 'Barras'; percent = 'Percentagem'; both = "Barras e percentagem (dois $($ii)cones)"; every = 'Atualizar a cada'; minutes = 'min'; alerts = 'Avisar acima de 90%'; save = 'Guardar'; cancel = 'Cancelar' }
+  en = @{ days = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); tomorrow = 'tomorrow'; week = 'Week'; stale = 'No data for a week.'; ago = 'ago'; updated = 'updated'; locked = 'LOCKED.'; none = 'Fuel Gauge: no data yet'; error = 'Fuel Gauge: could not read data'; open = 'Open Fuel Gauge'; refresh = 'Refresh now'; quit = 'Quit'; at = 'at'; of = 'of the limit'; settings = 'Settings...'; show = 'Show in the taskbar'; bars = 'Bars'; percent = 'Percentage'; both = 'Bars and percentage (two icons)'; every = 'Recheck resets every'; minutes = 'min'; alerts = 'Notify above 90%'; save = 'Save'; cancel = 'Cancel'; language = 'Language'; auto = 'Automatic (Windows)'; pace = 'pace'; hits = 'at'; safe = "won't reach"; before = 'before the reset'; perDay = '/day until then'; last = 'last request'; tiny = 'under 1%' }
+  pt = @{ days = @('dom', 'seg', 'ter', 'qua', 'qui', 'sex', "s$($aa)b"); tomorrow = "amanh$at"; week = 'Semana'; stale = "Sem dados h$($aa) uma semana."; ago = "h$($aa)"; updated = 'atualizado'; locked = 'BLOQUEADO.'; none = 'Fuel Gauge: sem dados ainda'; error = 'Fuel Gauge: erro a ler os dados'; open = 'Abrir Fuel Gauge'; refresh = 'Atualizar agora'; quit = 'Sair'; at = 'a'; of = 'do limite'; settings = "Defini$($cc)$($ot)es..."; show = 'Mostrar na barra'; bars = 'Barras'; percent = 'Percentagem'; both = "Barras e percentagem (dois $($ii)cones)"; every = 'Rever resets a cada'; minutes = 'min'; alerts = 'Avisar acima de 90%'; save = 'Guardar'; cancel = 'Cancelar'; language = 'Idioma'; auto = "Autom$($aa)tico (Windows)"; pace = 'ritmo'; hits = "$($ag)s"; safe = "n$($at)o chega aos"; before = 'antes do reset'; perDay = "/dia at$($ea) l$($aa)"; last = "$($ua)ltimo pedido"; tiny = 'menos de 1%' }
 }
 $Colors = @{
   ok    = [System.Drawing.Color]::FromArgb(63, 185, 80)
@@ -35,6 +35,10 @@ $script:lang = 'en'
 $script:url = $null
 
 function W { $Words[$script:lang] }
+function Resolve-Lang {
+  if ($script:cfg.lang -in @('pt', 'en')) { return $script:cfg.lang }
+  if ((Get-UICulture).TwoLetterISOLanguageName -eq 'pt') { 'pt' } else { 'en' }
+}
 function Get-Level([double]$p) { if ($p -ge 90) { 'crit' } elseif ($p -ge 75) { 'warn' } else { 'ok' } }
 
 function Get-Effective($w) {
@@ -84,13 +88,14 @@ $script:lastHandle2 = [IntPtr]::Zero
 
 # Tray settings, kept next to the data file (one set per account).
 $SettingsFile = [IO.Path]::ChangeExtension($DataFile, '.tray.json')
-$script:cfg = @{ mode = 'bars'; minutes = 2; alerts = $true }
+$script:cfg = @{ mode = 'bars'; minutes = 2; alerts = $true; lang = 'auto' }
 try {
   if (Test-Path $SettingsFile) {
     $saved = Get-Content $SettingsFile -Raw | ConvertFrom-Json
     if ($saved.mode -in @('bars', 'percent', 'both')) { $script:cfg.mode = [string]$saved.mode }
     if ([int]$saved.minutes -ge 1) { $script:cfg.minutes = [int]$saved.minutes }
     if ($null -ne $saved.alerts) { $script:cfg.alerts = [bool]$saved.alerts }
+    if ($saved.lang -in @('auto', 'pt', 'en')) { $script:cfg.lang = [string]$saved.lang }
   }
 } catch { }
 function Save-Settings { try { $script:cfg | ConvertTo-Json | Set-Content -Path $SettingsFile -Encoding UTF8 } catch { } }
@@ -169,7 +174,6 @@ $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray2 = New-Object System.Windows.Forms.NotifyIcon
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $itemOpen = $menu.Items.Add('Open Fuel Gauge', $null, { if ($script:url) { Start-Process $script:url } })
-$itemRefresh = $menu.Items.Add('Refresh now', $null, { Update-Tray })
 $itemSettings = $menu.Items.Add('Settings...', $null, { Show-Settings })
 $null = $menu.Items.Add('-')
 $itemQuit = $menu.Items.Add('Quit', $null, { $tray.Visible = $false; [System.Windows.Forms.Application]::Exit() })
@@ -189,7 +193,16 @@ $tray2.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
 $tray.add_DoubleClick({ if ($script:url) { Start-Process $script:url } })
 $script:lastLevel = @{}
 
+# The icon follows the data file: it redraws within seconds of each write
+# (every Claude reply), and every few minutes so ages and resets stay right.
+$script:lastWrite = [DateTime]::MinValue
+$script:lastFull = [DateTime]::MinValue
+function Get-DataWrite { try { (Get-Item $DataFile -ErrorAction Stop).LastWriteTimeUtc } catch { [DateTime]::MinValue } }
+
 function Update-Tray {
+  $script:lastWrite = Get-DataWrite
+  $script:lastFull = Get-Date
+  $script:lang = Resolve-Lang
   $a = 0.0; $b = 0.0; $stale = $true
   $text = (W).none
   $info = 'Fuel Gauge'
@@ -198,7 +211,6 @@ function Update-Tray {
   try {
     if (Test-Path $DataFile) {
       $d = Get-Content $DataFile -Raw -Encoding UTF8 | ConvertFrom-Json
-      $script:lang = if ($d.lang -eq 'pt') { 'pt' } else { 'en' }
       $script:url = if ($d.gaugeUrl) { [string]$d.gaugeUrl } else { $null }
       $five = $d.windows | Where-Object { $_.kind -eq 'five_hour' } | Select-Object -First 1
       $week = $d.windows | Where-Object { $_.kind -eq 'seven_day' } | Select-Object -First 1
@@ -210,11 +222,24 @@ function Update-Tray {
       if ($five) { $parts += "5h $(Format-Pct $a)% ($(Format-Reset $five.resetsAt))" }
       if ($week) { $parts += "$((W).week) $(Format-Pct $b)% ($(Format-Reset $week.resetsAt))" }
       $text = ($parts -join ' | ')
+      $lock = if ($d.lockAt) { [int]$d.lockAt } else { 95 }
       $notes = @()
-      if ($five -and $five.note) { $notes += "5h: $($five.note)" }
-      if ($week -and $week.note) { $notes += "$((W).week): $($week.note)" }
+      if ($five -and $null -ne $five.pace) {
+        $pc = "$((W).pace) $(Format-Pct ([double]$five.pace))%/h"
+        $notes += if ($five.etaAt) { "5h: $pc, $lock% $((W).hits) $(Format-Reset $five.etaAt)" } else { "5h: $pc, $((W).safe) $lock% $((W).before)" }
+      }
+      if ($week -and $null -ne $week.perDay) { $notes += "$((W).week): ~$([int]$week.perDay)%$((W).perDay)" }
       $noteText = $notes -join '  |  '
-      if ($d.lastCost) { $costLine = [string]$d.lastCost }
+      if ($d.cost) {
+        $parts = @()
+        foreach ($p in $d.cost.PSObject.Properties) {
+          if ([double]$p.Value -ge 0.5) {
+            $lbl = if ($p.Name -eq 'five_hour') { '5h' } elseif ($p.Name -eq 'seven_day') { (W).week } else { $p.Name }
+            $parts += "$lbl +$(Format-Pct ([Math]::Round([double]$p.Value, 1)))%"
+          }
+        }
+        $costLine = if ($parts.Count) { "$((W).last): $($parts -join ', ')" } else { "$((W).last): $((W).tiny)" }
+      }
       $acct = Get-AccountLabel $d.account
       $when = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$d.updatedAt).LocalDateTime.ToString('dd/MM HH:mm')
       $info = (@($acct, "$((W).updated) $when ($(Format-Age $ageMin))") | Where-Object { $_ }) -join ' - '
@@ -236,7 +261,7 @@ function Update-Tray {
   $itemNote.Text = $noteText; $itemNote.Visible = [bool]$noteText
   $itemCost.Text = $costLine; $itemCost.Visible = [bool]$costLine
   $itemOpen.Text = (W).open; $itemOpen.Enabled = [bool]$script:url
-  $itemRefresh.Text = (W).refresh; $itemQuit.Text = (W).quit; $itemSettings.Text = (W).settings
+  $itemQuit.Text = (W).quit; $itemSettings.Text = (W).settings
   if ($text.Length -gt 63) { $text = $text.Substring(0, 63) }
   $new = if ($script:cfg.mode -eq 'percent') { New-NumbersIcon $a $b $stale } else { New-BarsIcon $a $b $stale }
   $tray.Icon = $new.Icon
@@ -262,7 +287,7 @@ function Show-Settings {
   $f.StartPosition = 'CenterScreen'; $f.TopMost = $true; $f.ShowInTaskbar = $false
   $f.Font = New-Object System.Drawing.Font('Segoe UI', 9)
   $f.AutoScaleMode = 'Dpi'
-  $f.ClientSize = New-Object System.Drawing.Size(320, 236)
+  $f.ClientSize = New-Object System.Drawing.Size(320, 270)
   $grp = New-Object System.Windows.Forms.GroupBox
   $grp.Text = (W).show; $grp.Location = New-Object System.Drawing.Point(12, 10); $grp.Size = New-Object System.Drawing.Size(296, 104)
   $rb = @{}
@@ -281,18 +306,24 @@ function Show-Settings {
   $cb.SelectedIndex = [Math]::Max(0, [Array]::IndexOf(@(1, 2, 5, 10), [int]$script:cfg.minutes))
   $chk = New-Object System.Windows.Forms.CheckBox
   $chk.Text = (W).alerts; $chk.AutoSize = $true; $chk.Location = New-Object System.Drawing.Point(14, 162); $chk.Checked = [bool]$script:cfg.alerts
+  $lblLang = New-Object System.Windows.Forms.Label
+  $lblLang.Text = (W).language; $lblLang.AutoSize = $true; $lblLang.Location = New-Object System.Drawing.Point(14, 196)
+  $cbLang = New-Object System.Windows.Forms.ComboBox
+  $cbLang.DropDownStyle = 'DropDownList'; $cbLang.Location = New-Object System.Drawing.Point(150, 192); $cbLang.Width = 158
+  [void]$cbLang.Items.Add((W).auto); [void]$cbLang.Items.Add("Portugu$($ee)s"); [void]$cbLang.Items.Add('English')
+  $cbLang.SelectedIndex = [Math]::Max(0, [Array]::IndexOf(@('auto', 'pt', 'en'), [string]$script:cfg.lang))
   $ok = New-Object System.Windows.Forms.Button
-  $ok.Text = (W).save; $ok.Location = New-Object System.Drawing.Point(140, 198); $ok.Width = 80; $ok.DialogResult = 'OK'
+  $ok.Text = (W).save; $ok.Location = New-Object System.Drawing.Point(140, 232); $ok.Width = 80; $ok.DialogResult = 'OK'
   $no = New-Object System.Windows.Forms.Button
-  $no.Text = (W).cancel; $no.Location = New-Object System.Drawing.Point(228, 198); $no.Width = 80; $no.DialogResult = 'Cancel'
+  $no.Text = (W).cancel; $no.Location = New-Object System.Drawing.Point(228, 232); $no.Width = 80; $no.DialogResult = 'Cancel'
   $f.AcceptButton = $ok; $f.CancelButton = $no
-  $f.Controls.AddRange(@($grp, $lbl, $cb, $chk, $ok, $no))
+  $f.Controls.AddRange(@($grp, $lbl, $cb, $chk, $lblLang, $cbLang, $ok, $no))
   if ($f.ShowDialog() -eq 'OK') {
     foreach ($m in $rb.Keys) { if ($rb[$m].Checked) { $script:cfg.mode = $m } }
     $script:cfg.minutes = @(1, 2, 5, 10)[$cb.SelectedIndex]
     $script:cfg.alerts = $chk.Checked
+    $script:cfg.lang = @('auto', 'pt', 'en')[$cbLang.SelectedIndex]
     Save-Settings
-    $timer.Interval = $script:cfg.minutes * 60000
     Update-Tray
   }
   $f.Dispose()
@@ -301,8 +332,10 @@ function Show-Settings {
 Update-Tray
 $tray.Visible = $true
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = $script:cfg.minutes * 60000
-$timer.add_Tick({ Update-Tray })
+$timer.Interval = 5000
+$timer.add_Tick({
+  if ((Get-DataWrite) -ne $script:lastWrite -or ((Get-Date) - $script:lastFull).TotalMinutes -ge $script:cfg.minutes) { Update-Tray }
+})
 $timer.Start()
 [System.Windows.Forms.Application]::Run()
 $timer.Stop(); $tray.Dispose(); $mutex.ReleaseMutex()

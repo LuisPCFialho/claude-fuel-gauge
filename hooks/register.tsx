@@ -269,6 +269,23 @@ function pace(h: FuelHistory | undefined, f: FuelWindow, now: number): number | 
   return dp < 0 ? null : dp / hours
 }
 
+// Raw outlook figures, for surfaces that word them in their own language
+// and timezone (the Windows tray).
+function outlookData(h: FuelHistory | undefined, f: FuelWindow, now: number, c: Config): { pace: number | null; etaAt: string | null; perDay: number | null } {
+  const v = effective(f, now)
+  if (f.kind.startsWith('seven_day')) {
+    if (!f.resetsAt) return { pace: null, etaAt: null, perDay: null }
+    const days = (Date.parse(f.resetsAt) - now) / 86_400_000
+    const left = c.lockAt - v
+    return { pace: null, etaAt: null, perDay: days < 0.5 || left <= 0 ? null : Math.max(0, Math.round(left / days)) }
+  }
+  const r = pace(h, f, now)
+  if (r === null) return { pace: null, etaAt: null, perDay: null }
+  const reset = f.resetsAt ? Date.parse(f.resetsAt) : Number.POSITIVE_INFINITY
+  const eta = r > 0 ? now + ((c.lockAt - v) / r) * 3600_000 : Number.POSITIVE_INFINITY
+  return { pace: Math.round(r * 10) / 10, etaAt: eta < reset ? new Date(eta).toISOString() : null, perDay: null }
+}
+
 // The short-window outlook (pace and when it would hit the stop) or, for
 // weekly windows, the daily budget left until the reset.
 function outlook(h: FuelHistory | undefined, f: FuelWindow, now: number, c: Config, w: Words): string {
@@ -408,9 +425,10 @@ async function payload($: EngineInterface, c: Config, w: Words) {
     lockAt: c.lockAt,
     locked: s.locked,
     gaugeUrl: c.gaugeUrl || null,
-    windows: s.r.windows.map(f => ({ kind: f.kind, label: label(f.kind, w), percent: f.percentUsed, resetsAt: f.resetsAt ?? null, note: outlook(h, f, s.now, c, w) || null })),
+    windows: s.r.windows.map(f => ({ kind: f.kind, label: label(f.kind, w), percent: f.percentUsed, resetsAt: f.resetsAt ?? null, note: outlook(h, f, s.now, c, w) || null, ...outlookData(h, f, s.now, c) })),
     context: { percent: s.r.ctxPercent ?? null, tokens: s.r.ctxTokens ?? null, window: s.r.ctxWindow },
     lastCost: costText(await read($, lastCost), c, w) || null,
+    cost: await read($, lastCost),
   }
 }
 
